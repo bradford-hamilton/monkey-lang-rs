@@ -1,6 +1,7 @@
 use std::fs;
 
 mod lexer;
+mod token;
 
 fn main() {
     let filename = "test_input.mo";
