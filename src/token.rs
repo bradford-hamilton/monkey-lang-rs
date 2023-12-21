@@ -1,3 +1,4 @@
+use lazy_static::lazy_static;
 use std::collections::HashMap;
 use std::fmt;
 
@@ -114,31 +115,21 @@ pub struct Token {
     pub line: usize,
 }
 
-// TODO: can this be a static mapping of some sort?
-struct Keywords;
-
-impl Keywords {
-    pub fn all() -> HashMap<String, TokenType> {
-        let mut keywords = HashMap::new();
-
-        keywords.insert("func".to_owned(), TokenType::FUNCTION);
-        keywords.insert("let".to_owned(), TokenType::LET);
-        keywords.insert("const".to_owned(), TokenType::CONST);
-        keywords.insert("true".to_owned(), TokenType::TRUE);
-        keywords.insert("false".to_owned(), TokenType::FALSE);
-        keywords.insert("if".to_owned(), TokenType::IF);
-        keywords.insert("else".to_owned(), TokenType::ELSE);
-        keywords.insert("return".to_owned(), TokenType::RETURN);
-
-        keywords
-    }
+lazy_static! {
+    static ref KEYWORDS: HashMap<&'static str, TokenType> = {
+        let mut m = HashMap::new();
+        m.insert("func", TokenType::FUNCTION);
+        m.insert("let", TokenType::LET);
+        m.insert("const", TokenType::CONST);
+        m.insert("true", TokenType::TRUE);
+        m.insert("false", TokenType::FALSE);
+        m.insert("if", TokenType::IF);
+        m.insert("else", TokenType::ELSE);
+        m.insert("return", TokenType::RETURN);
+        m
+    };
 }
 
-/// look_up_identifier checks our keywords map for the scanned keyword. If it finds one, then
-/// the keyword's type is returned. If not, the user defined IDENTIFIER is returned
-pub fn look_up_identifier(identifier: &String) -> TokenType {
-    if Keywords::all().contains_key(identifier) {
-        return Keywords::all()[identifier];
-    }
-    TokenType::IDENTIFIER
+pub fn look_up_identifier(identifier: &str) -> TokenType {
+    *KEYWORDS.get(identifier).unwrap_or(&TokenType::IDENTIFIER)
 }
