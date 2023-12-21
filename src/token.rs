@@ -107,7 +107,7 @@ impl fmt::Display for TokenType {
 }
 
 /// Token is a struct representing a Monkey token - holds a type and a literal
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Token {
     pub token_type: TokenType,
     pub literal: String,
