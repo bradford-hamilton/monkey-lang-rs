@@ -1,6 +1,5 @@
 use crate::token::Token;
 use std::collections::HashMap;
-use std::string;
 
 /// Node - nodes in our ast will provide a token_literal and string methods for debugging.
 trait Node {
@@ -30,7 +29,7 @@ struct RootNode {
 impl RootNode {
     /// token_literal returns the RootNode's literal and satisfies the Node trait.
     fn token_literal(&self) -> String {
-        if self.statements.len() > 0 {
+        if !self.statements.is_empty() {
             return self.statements[0].token_literal();
         }
         String::from("")

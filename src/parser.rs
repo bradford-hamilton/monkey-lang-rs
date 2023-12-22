@@ -39,21 +39,21 @@ pub enum OpPrecedence {
 lazy_static! {
     static ref PRECEDENCES: HashMap<TokenType, OpPrecedence> = {
         let mut m = HashMap::new();
-        m.insert(TokenType::EQUAL_EQUAL, OpPrecedence::Equal);
-        m.insert(TokenType::BANG_EQUAL, OpPrecedence::Equal);
-        m.insert(TokenType::LESS, OpPrecedence::LessGreater);
-        m.insert(TokenType::GREATER, OpPrecedence::LessGreater);
-        m.insert(TokenType::LESS_EQUAL, OpPrecedence::LessGreater);
-        m.insert(TokenType::GREATER_EQUAL, OpPrecedence::LessGreater);
-        m.insert(TokenType::PLUS, OpPrecedence::Sum);
-        m.insert(TokenType::MINUS, OpPrecedence::Sum);
-        m.insert(TokenType::SLASH, OpPrecedence::Product);
-        m.insert(TokenType::STAR, OpPrecedence::Product);
-        m.insert(TokenType::MOD, OpPrecedence::Modulo);
-        m.insert(TokenType::AND, OpPrecedence::Logical);
-        m.insert(TokenType::OR, OpPrecedence::Logical);
-        m.insert(TokenType::LEFT_PAREN, OpPrecedence::Call);
-        m.insert(TokenType::LEFT_BRACKET, OpPrecedence::Index);
+        m.insert(TokenType::EqualEqual, OpPrecedence::Equal);
+        m.insert(TokenType::BangEqual, OpPrecedence::Equal);
+        m.insert(TokenType::Less, OpPrecedence::LessGreater);
+        m.insert(TokenType::Greater, OpPrecedence::LessGreater);
+        m.insert(TokenType::LessEqual, OpPrecedence::LessGreater);
+        m.insert(TokenType::GreaterEqual, OpPrecedence::LessGreater);
+        m.insert(TokenType::Plus, OpPrecedence::Sum);
+        m.insert(TokenType::Minus, OpPrecedence::Sum);
+        m.insert(TokenType::Slash, OpPrecedence::Product);
+        m.insert(TokenType::Star, OpPrecedence::Product);
+        m.insert(TokenType::Mod, OpPrecedence::Modulo);
+        m.insert(TokenType::And, OpPrecedence::Logical);
+        m.insert(TokenType::Or, OpPrecedence::Logical);
+        m.insert(TokenType::LeftParen, OpPrecedence::Call);
+        m.insert(TokenType::LeftBracket, OpPrecedence::Index);
         m
     };
 }
@@ -88,17 +88,17 @@ impl Parser {
             current_token: Token {
                 line: 0,
                 literal: String::from(""),
-                token_type: TokenType::NONE,
+                token_type: TokenType::None,
             },
             peek_token: Token {
                 line: 0,
                 literal: String::from(""),
-                token_type: TokenType::NONE,
+                token_type: TokenType::None,
             },
             prev_token: Token {
                 line: 0,
                 literal: String::from(""),
-                token_type: TokenType::NONE,
+                token_type: TokenType::None,
             },
             prefix_parse_funcs: HashMap::new(),
             infix_parse_funcs: HashMap::new(),
@@ -106,35 +106,35 @@ impl Parser {
         };
 
         // Register all of our prefix parse funcs
-        parser.register_prefix(TokenType::IDENTIFIER, parse_identifier);
-        parser.register_prefix(TokenType::INTEGER, parse_integer_literal);
-        parser.register_prefix(TokenType::BANG, parse_prefix_expr);
-        parser.register_prefix(TokenType::MINUS, parse_prefix_expr);
-        parser.register_prefix(TokenType::TRUE, parse_boolean);
-        parser.register_prefix(TokenType::FALSE, parse_boolean);
-        parser.register_prefix(TokenType::LEFT_PAREN, parse_grouped_expr);
-        parser.register_prefix(TokenType::IF, parse_if_expr);
-        parser.register_prefix(TokenType::FUNCTION, parse_function_literal);
-        parser.register_prefix(TokenType::STRING, parse_string_literal);
-        parser.register_prefix(TokenType::LEFT_BRACKET, parse_array_literal);
-        parser.register_prefix(TokenType::LEFT_BRACE, parse_hash_literal);
+        parser.register_prefix(TokenType::Identifier, parse_identifier);
+        parser.register_prefix(TokenType::Integer, parse_integer_literal);
+        parser.register_prefix(TokenType::Bang, parse_prefix_expr);
+        parser.register_prefix(TokenType::Minus, parse_prefix_expr);
+        parser.register_prefix(TokenType::True, parse_boolean);
+        parser.register_prefix(TokenType::False, parse_boolean);
+        parser.register_prefix(TokenType::LeftParen, parse_grouped_expr);
+        parser.register_prefix(TokenType::If, parse_if_expr);
+        parser.register_prefix(TokenType::Function, parse_function_literal);
+        parser.register_prefix(TokenType::String, parse_string_literal);
+        parser.register_prefix(TokenType::LeftBracket, parse_array_literal);
+        parser.register_prefix(TokenType::LeftBrace, parse_hash_literal);
 
         // Register all of our infix parse funcs
-        parser.register_infix(TokenType::PLUS, parse_infix_expr);
-        parser.register_infix(TokenType::MINUS, parse_infix_expr);
-        parser.register_infix(TokenType::SLASH, parse_infix_expr);
-        parser.register_infix(TokenType::STAR, parse_infix_expr);
-        parser.register_infix(TokenType::MOD, parse_infix_expr);
-        parser.register_infix(TokenType::EQUAL_EQUAL, parse_infix_expr);
-        parser.register_infix(TokenType::BANG_EQUAL, parse_infix_expr);
-        parser.register_infix(TokenType::LESS, parse_infix_expr);
-        parser.register_infix(TokenType::GREATER, parse_infix_expr);
-        parser.register_infix(TokenType::LESS_EQUAL, parse_infix_expr);
-        parser.register_infix(TokenType::GREATER_EQUAL, parse_infix_expr);
-        parser.register_infix(TokenType::LEFT_PAREN, parse_call_expr);
-        parser.register_infix(TokenType::LEFT_BRACKET, parse_index_expr);
-        parser.register_infix(TokenType::AND, parse_infix_expr);
-        parser.register_infix(TokenType::OR, parse_infix_expr);
+        parser.register_infix(TokenType::Plus, parse_infix_expr);
+        parser.register_infix(TokenType::Minus, parse_infix_expr);
+        parser.register_infix(TokenType::Slash, parse_infix_expr);
+        parser.register_infix(TokenType::Star, parse_infix_expr);
+        parser.register_infix(TokenType::Mod, parse_infix_expr);
+        parser.register_infix(TokenType::EqualEqual, parse_infix_expr);
+        parser.register_infix(TokenType::BangEqual, parse_infix_expr);
+        parser.register_infix(TokenType::Less, parse_infix_expr);
+        parser.register_infix(TokenType::Greater, parse_infix_expr);
+        parser.register_infix(TokenType::LessEqual, parse_infix_expr);
+        parser.register_infix(TokenType::GreaterEqual, parse_infix_expr);
+        parser.register_infix(TokenType::LeftParen, parse_call_expr);
+        parser.register_infix(TokenType::LeftBracket, parse_index_expr);
+        parser.register_infix(TokenType::And, parse_infix_expr);
+        parser.register_infix(TokenType::Or, parse_infix_expr);
 
         // TODO:
         // Register all of our postfix parse funcs
@@ -192,7 +192,7 @@ impl Parser {
 
         self.peek_error(token_type);
 
-        return false;
+        false
     }
 
     fn parse_expression(&mut self, precedence: OpPrecedence) -> Option<Box<dyn Expression>> {
@@ -206,7 +206,7 @@ impl Parser {
 
         let mut left_expr = prefix(self);
 
-        while !self.peek_token_type_is(TokenType::SEMICOLON)
+        while !self.peek_token_type_is(TokenType::Semicolon)
             && precedence < self.peek_token_precedence()
         {
             let infix = match self.infix_parse_funcs.get(&self.peek_token.token_type) {
@@ -246,7 +246,7 @@ impl Parser {
 
         list.push(expr);
 
-        while self.peek_token_type_is(TokenType::COMMA) {
+        while self.peek_token_type_is(TokenType::Comma) {
             self.next_token();
             self.next_token();
 
@@ -280,22 +280,12 @@ impl Parser {
 
         self.next_token();
 
-        while !self.current_token_type_is(TokenType::RIGHT_BRACE)
-            && !self.current_token_type_is(TokenType::EOF)
+        while !self.current_token_type_is(TokenType::RightBrace)
+            && !self.current_token_type_is(TokenType::Eof)
         {
-            match self.parse_statement() {
-                Some(stmt) => stmt,
-                _ => {
-                    return BlockStatement {
-                        token: Token {
-                            line: 0,
-                            literal: String::from(""),
-                            token_type: TokenType::NONE,
-                        },
-                        statements: vec![],
-                    }
-                }
-            };
+            let stmt = self.parse_statement();
+
+            // if stmt == ZeroValueExpression
 
             self.next_token();
         }
@@ -303,21 +293,19 @@ impl Parser {
         block
     }
 
-    fn parse_statement(&mut self) -> Option<Box<dyn Statement>> {
-        let ret = match self.current_token.token_type {
-            TokenType::LET => parse_let_statement(self),
-            TokenType::CONST => parse_const_statement(self),
-            TokenType::RETURN => parse_return_statement(self),
+    fn parse_statement(&mut self) -> Box<dyn Statement> {
+        match self.current_token.token_type {
+            TokenType::Let => parse_let_statement(self),
+            TokenType::Const => parse_const_statement(self),
+            TokenType::Return => parse_return_statement(self),
             _ => parse_expr_statement(self),
-        };
-
-        Some(ret)
+        }
     }
 
     fn parse_function_params(&mut self) -> Vec<Identifier> {
         let mut identifiers = vec![];
 
-        if self.peek_token_type_is(TokenType::RIGHT_PAREN) {
+        if self.peek_token_type_is(TokenType::RightParen) {
             self.next_token();
             return identifiers;
         }
@@ -329,7 +317,7 @@ impl Parser {
             value: self.current_token.literal.clone(),
         });
 
-        while self.peek_token_type_is(TokenType::COMMA) {
+        while self.peek_token_type_is(TokenType::Comma) {
             self.next_token();
             self.next_token();
 
@@ -339,7 +327,7 @@ impl Parser {
             });
         }
 
-        if !self.expect_peek_type(TokenType::RIGHT_PAREN) {
+        if !self.expect_peek_type(TokenType::RightParen) {
             return vec![];
         }
 
@@ -406,10 +394,10 @@ fn parse_infix_expr(parser: &mut Parser, left: Box<dyn Expression>) -> Box<dyn E
     Box::new(expr)
 }
 
-fn parse_call_expr(parser: &mut Parser, left: Box<dyn Expression>) -> Box<dyn Expression> {
+fn parse_call_expr(_parser: &mut Parser, _left: Box<dyn Expression>) -> Box<dyn Expression> {
     todo!();
 }
-fn parse_index_expr(parser: &mut Parser, left: Box<dyn Expression>) -> Box<dyn Expression> {
+fn parse_index_expr(_parser: &mut Parser, _left: Box<dyn Expression>) -> Box<dyn Expression> {
     todo!();
 }
 
@@ -452,7 +440,7 @@ fn parse_grouped_expr(parser: &mut Parser) -> Box<dyn Expression> {
         }
     };
 
-    if !parser.expect_peek_type(TokenType::RIGHT_PAREN) {
+    if !parser.expect_peek_type(TokenType::RightParen) {
         return Box::new(ZeroValueExpression {});
     }
 
@@ -473,7 +461,7 @@ fn parse_if_expr(parser: &mut Parser) -> Box<dyn Expression> {
         },
     };
 
-    if !parser.expect_peek_type(TokenType::LEFT_PAREN) {
+    if !parser.expect_peek_type(TokenType::LeftParen) {
         return Box::new(ZeroValueExpression {});
     }
 
@@ -491,19 +479,19 @@ fn parse_if_expr(parser: &mut Parser) -> Box<dyn Expression> {
         }
     };
 
-    if !parser.expect_peek_type(TokenType::RIGHT_PAREN) {
+    if !parser.expect_peek_type(TokenType::RightParen) {
         return Box::new(ZeroValueExpression {});
     }
-    if !parser.expect_peek_type(TokenType::LEFT_BRACE) {
+    if !parser.expect_peek_type(TokenType::LeftBrace) {
         return Box::new(ZeroValueExpression {});
     }
 
     expr.consequence = parser.parse_block_statement();
 
-    if parser.peek_token_type_is(TokenType::ELSE) {
+    if parser.peek_token_type_is(TokenType::Else) {
         parser.next_token();
 
-        if !parser.expect_peek_type(TokenType::LEFT_BRACE) {
+        if !parser.expect_peek_type(TokenType::LeftBrace) {
             return Box::new(ZeroValueExpression {});
         }
 
@@ -515,7 +503,7 @@ fn parse_if_expr(parser: &mut Parser) -> Box<dyn Expression> {
 
 fn parse_let_statement(parser: &mut Parser) -> Box<dyn Statement> {
     let zero_value_token = Token {
-        token_type: TokenType::NONE,
+        token_type: TokenType::None,
         literal: String::from(""),
         line: 0,
     };
@@ -529,7 +517,7 @@ fn parse_let_statement(parser: &mut Parser) -> Box<dyn Statement> {
         value: Box::new(ZeroValueExpression {}),
     };
 
-    if !parser.expect_peek_type(TokenType::IDENTIFIER) {
+    if !parser.expect_peek_type(TokenType::Identifier) {
         return Box::new(ZeroValueStatement {});
     }
 
@@ -538,7 +526,7 @@ fn parse_let_statement(parser: &mut Parser) -> Box<dyn Statement> {
         value: parser.current_token.literal.clone(),
     };
 
-    if !parser.expect_peek_type(TokenType::EQUAL) {
+    if !parser.expect_peek_type(TokenType::Equal) {
         return Box::new(ZeroValueStatement {});
     }
 
@@ -561,7 +549,7 @@ fn parse_let_statement(parser: &mut Parser) -> Box<dyn Statement> {
     // 	fl.Name = stmt.Name.Value
     // }
 
-    if parser.peek_token_type_is(TokenType::SEMICOLON) {
+    if parser.peek_token_type_is(TokenType::Semicolon) {
         parser.next_token();
     }
 
@@ -570,7 +558,7 @@ fn parse_let_statement(parser: &mut Parser) -> Box<dyn Statement> {
 
 fn parse_const_statement(parser: &mut Parser) -> Box<dyn Statement> {
     let zero_value_token = Token {
-        token_type: TokenType::NONE,
+        token_type: TokenType::None,
         literal: String::from(""),
         line: 0,
     };
@@ -584,7 +572,7 @@ fn parse_const_statement(parser: &mut Parser) -> Box<dyn Statement> {
         value: Box::new(ZeroValueExpression {}),
     };
 
-    if !parser.expect_peek_type(TokenType::IDENTIFIER) {
+    if !parser.expect_peek_type(TokenType::Identifier) {
         return Box::new(ZeroValueStatement {});
     }
 
@@ -593,7 +581,7 @@ fn parse_const_statement(parser: &mut Parser) -> Box<dyn Statement> {
         value: parser.current_token.literal.clone(),
     };
 
-    if !parser.expect_peek_type(TokenType::EQUAL) {
+    if !parser.expect_peek_type(TokenType::Equal) {
         return Box::new(ZeroValueStatement {});
     }
 
@@ -616,7 +604,7 @@ fn parse_const_statement(parser: &mut Parser) -> Box<dyn Statement> {
     // 	fl.Name = stmt.Name.Value
     // }
 
-    if parser.peek_token_type_is(TokenType::SEMICOLON) {
+    if parser.peek_token_type_is(TokenType::Semicolon) {
         parser.next_token();
     }
 
@@ -643,7 +631,7 @@ fn parse_return_statement(parser: &mut Parser) -> Box<dyn Statement> {
         }
     };
 
-    if parser.peek_token_type_is(TokenType::SEMICOLON) {
+    if parser.peek_token_type_is(TokenType::Semicolon) {
         parser.next_token();
     }
 
@@ -668,7 +656,7 @@ fn parse_expr_statement(parser: &mut Parser) -> Box<dyn Statement> {
         }
     };
 
-    if parser.peek_token_type_is(TokenType::SEMICOLON) {
+    if parser.peek_token_type_is(TokenType::Semicolon) {
         parser.next_token();
     }
 
@@ -677,7 +665,7 @@ fn parse_expr_statement(parser: &mut Parser) -> Box<dyn Statement> {
 
 fn parse_function_literal(parser: &mut Parser) -> Box<dyn Expression> {
     let zero_value_token = Token {
-        token_type: TokenType::NONE,
+        token_type: TokenType::None,
         literal: String::from(""),
         line: 0,
     };
@@ -691,13 +679,13 @@ fn parse_function_literal(parser: &mut Parser) -> Box<dyn Expression> {
         name: String::from(""),
     };
 
-    if !parser.expect_peek_type(TokenType::LEFT_PAREN) {
+    if !parser.expect_peek_type(TokenType::LeftParen) {
         return Box::new(ZeroValueExpression {});
     }
 
     func_literal.parameters = parser.parse_function_params();
 
-    if !parser.expect_peek_type(TokenType::LEFT_BRACE) {
+    if !parser.expect_peek_type(TokenType::LeftBrace) {
         return Box::new(ZeroValueExpression {});
     }
 
@@ -712,7 +700,7 @@ fn parse_array_literal(parser: &mut Parser) -> Box<dyn Expression> {
         elements: vec![],
     };
 
-    array.elements = parser.parse_expression_list(TokenType::RIGHT_BRACKET);
+    array.elements = parser.parse_expression_list(TokenType::RightBracket);
 
     Box::new(array)
 }
@@ -723,7 +711,7 @@ fn parse_hash_literal(parser: &mut Parser) -> Box<dyn Expression> {
         pairs: HashMap::new(),
     };
 
-    while !parser.peek_token_type_is(TokenType::RIGHT_BRACE) {
+    while !parser.peek_token_type_is(TokenType::RightBrace) {
         parser.next_token();
 
         let key = match parser.parse_expression(OpPrecedence::Lowest) {
@@ -738,7 +726,7 @@ fn parse_hash_literal(parser: &mut Parser) -> Box<dyn Expression> {
             }
         };
 
-        if !parser.expect_peek_type(TokenType::COLON) {
+        if !parser.expect_peek_type(TokenType::Colon) {
             return Box::new(ZeroValueExpression {});
         }
 
@@ -758,15 +746,15 @@ fn parse_hash_literal(parser: &mut Parser) -> Box<dyn Expression> {
 
         hash.pairs.insert(key.string(), value);
 
-        if !parser.peek_token_type_is(TokenType::RIGHT_BRACE)
-            && !parser.expect_peek_type(TokenType::COMMA)
+        if !parser.peek_token_type_is(TokenType::RightBrace)
+            && !parser.expect_peek_type(TokenType::Comma)
         {
             return Box::new(ZeroValueExpression {});
         }
     }
 
-    if !parser.peek_token_type_is(TokenType::RIGHT_BRACE)
-        && !parser.expect_peek_type(TokenType::COMMA)
+    if !parser.peek_token_type_is(TokenType::RightBrace)
+        && !parser.expect_peek_type(TokenType::Comma)
     {
         return Box::new(ZeroValueExpression {});
     }
@@ -793,6 +781,6 @@ fn parse_integer_literal(parser: &mut Parser) -> Box<dyn Expression> {
 fn parse_boolean(parser: &mut Parser) -> Box<dyn Expression> {
     Box::new(Boolean {
         token: parser.current_token.clone(),
-        value: parser.current_token_type_is(TokenType::TRUE),
+        value: parser.current_token_type_is(TokenType::True),
     })
 }

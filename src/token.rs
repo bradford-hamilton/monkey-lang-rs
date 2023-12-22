@@ -6,102 +6,102 @@ use std::fmt;
 #[derive(Debug, PartialEq, Eq, Hash, Copy, Clone)]
 pub enum TokenType {
     /// Token/character we don't know about
-    ILLEGAL,
+    Illegal,
     /// End of file
-    EOF,
+    Eof,
 
     /// Identifiers & literals
-    IDENTIFIER, // add, foobar, x, y, ...
-    INTEGER,
-    STRING,
+    Identifier, // add, foobar, x, y, ...
+    Integer,
+    String,
 
     /// Operators
-    EQUAL,
-    PLUS,
-    PLUS_PLUS,
-    MINUS,
-    MINUS_MINUS,
-    STAR,
-    SLASH,
-    MOD,
-    BANG,
-    EQUAL_EQUAL,
-    LESS,
-    LESS_EQUAL,
-    GREATER,
-    GREATER_EQUAL,
-    BANG_EQUAL,
-    AND,
-    OR,
+    Equal,
+    Plus,
+    PlusPlus,
+    Minus,
+    MinusMinus,
+    Star,
+    Slash,
+    Mod,
+    Bang,
+    EqualEqual,
+    Less,
+    LessEqual,
+    Greater,
+    GreaterEqual,
+    BangEqual,
+    And,
+    Or,
 
     /// Delimiters
-    COMMA,
-    COLON,
-    SEMICOLON,
-    LEFT_PAREN,
-    RIGHT_PAREN,
-    LEFT_BRACE,
-    RIGHT_BRACE,
-    LEFT_BRACKET,
-    RIGHT_BRACKET,
+    Comma,
+    Colon,
+    Semicolon,
+    LeftParen,
+    RightParen,
+    LeftBrace,
+    RightBrace,
+    LeftBracket,
+    RightBracket,
 
     /// Keywords
-    FUNCTION,
-    LET,
-    CONST,
-    TRUE,
-    FALSE,
-    IF,
-    ELSE,
-    RETURN,
+    Function,
+    Let,
+    Const,
+    True,
+    False,
+    If,
+    Else,
+    Return,
 
     /// None
-    NONE,
+    None,
 }
 
 impl fmt::Display for TokenType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let printable = match *self {
-            TokenType::ILLEGAL => "ILLEGAL",
-            TokenType::EOF => "EOF",
-            TokenType::IDENTIFIER => "IDENTIFIER",
-            TokenType::INTEGER => "INTEGER",
-            TokenType::STRING => "STRING",
-            TokenType::EQUAL => "EQUAL",
-            TokenType::PLUS => "PLUS",
-            TokenType::PLUS_PLUS => "PLUS_PLUS",
-            TokenType::MINUS => "MINUS",
-            TokenType::MINUS_MINUS => "MINUS_MINUS",
-            TokenType::STAR => "STAR",
-            TokenType::SLASH => "SLASH",
-            TokenType::MOD => "MOD",
-            TokenType::BANG => "BANG",
-            TokenType::EQUAL_EQUAL => "EQUAL_EQUAL",
-            TokenType::LESS => "LESS",
-            TokenType::LESS_EQUAL => "LESS_EQUAL",
-            TokenType::GREATER => "GREATER",
-            TokenType::GREATER_EQUAL => "GREATER_EQUAL",
-            TokenType::BANG_EQUAL => "BANG_EQUAL",
-            TokenType::AND => "AND",
-            TokenType::OR => "OR",
-            TokenType::COMMA => "COMMA",
-            TokenType::COLON => "COLON",
-            TokenType::SEMICOLON => "SEMICOLON",
-            TokenType::LEFT_PAREN => "LEFT_PAREN",
-            TokenType::RIGHT_PAREN => "RIGHT_PAREN",
-            TokenType::LEFT_BRACE => "LEFT_BRACE",
-            TokenType::RIGHT_BRACE => "RIGHT_BRACE",
-            TokenType::LEFT_BRACKET => "LEFT_BRACKET",
-            TokenType::RIGHT_BRACKET => "RIGHT_BRACKET",
-            TokenType::FUNCTION => "FUNCTION",
-            TokenType::LET => "LET",
-            TokenType::CONST => "CONST",
-            TokenType::TRUE => "TRUE",
-            TokenType::FALSE => "FALSE",
-            TokenType::IF => "IF",
-            TokenType::ELSE => "ELSE",
-            TokenType::RETURN => "RETURN",
-            TokenType::NONE => "NONE",
+            TokenType::Illegal => "ILLEGAL",
+            TokenType::Eof => "EOF",
+            TokenType::Identifier => "IDENTIFIER",
+            TokenType::Integer => "INTEGER",
+            TokenType::String => "STRING",
+            TokenType::Equal => "EQUAL",
+            TokenType::Plus => "PLUS",
+            TokenType::PlusPlus => "PLUS_PLUS",
+            TokenType::Minus => "MINUS",
+            TokenType::MinusMinus => "MINUS_MINUS",
+            TokenType::Star => "STAR",
+            TokenType::Slash => "SLASH",
+            TokenType::Mod => "MOD",
+            TokenType::Bang => "BANG",
+            TokenType::EqualEqual => "EQUAL_EQUAL",
+            TokenType::Less => "LESS",
+            TokenType::LessEqual => "LESS_EQUAL",
+            TokenType::Greater => "GREATER",
+            TokenType::GreaterEqual => "GREATER_EQUAL",
+            TokenType::BangEqual => "BANG_EQUAL",
+            TokenType::And => "AND",
+            TokenType::Or => "OR",
+            TokenType::Comma => "COMMA",
+            TokenType::Colon => "COLON",
+            TokenType::Semicolon => "SEMICOLON",
+            TokenType::LeftParen => "LEFT_PAREN",
+            TokenType::RightParen => "RIGHT_PAREN",
+            TokenType::LeftBrace => "LEFT_BRACE",
+            TokenType::RightBrace => "RIGHT_BRACE",
+            TokenType::LeftBracket => "LEFT_BRACKET",
+            TokenType::RightBracket => "RIGHT_BRACKET",
+            TokenType::Function => "FUNCTION",
+            TokenType::Let => "LET",
+            TokenType::Const => "CONST",
+            TokenType::True => "TRUE",
+            TokenType::False => "FALSE",
+            TokenType::If => "IF",
+            TokenType::Else => "ELSE",
+            TokenType::Return => "RETURN",
+            TokenType::None => "NONE",
         };
         write!(f, "{}", printable)
     }
@@ -118,18 +118,18 @@ pub struct Token {
 lazy_static! {
     static ref KEYWORDS: HashMap<&'static str, TokenType> = {
         let mut m = HashMap::new();
-        m.insert("func", TokenType::FUNCTION);
-        m.insert("let", TokenType::LET);
-        m.insert("const", TokenType::CONST);
-        m.insert("true", TokenType::TRUE);
-        m.insert("false", TokenType::FALSE);
-        m.insert("if", TokenType::IF);
-        m.insert("else", TokenType::ELSE);
-        m.insert("return", TokenType::RETURN);
+        m.insert("func", TokenType::Function);
+        m.insert("let", TokenType::Let);
+        m.insert("const", TokenType::Const);
+        m.insert("true", TokenType::True);
+        m.insert("false", TokenType::False);
+        m.insert("if", TokenType::If);
+        m.insert("else", TokenType::Else);
+        m.insert("return", TokenType::Return);
         m
     };
 }
 
 pub fn look_up_identifier(identifier: &str) -> TokenType {
-    *KEYWORDS.get(identifier).unwrap_or(&TokenType::IDENTIFIER)
+    *KEYWORDS.get(identifier).unwrap_or(&TokenType::Identifier)
 }
