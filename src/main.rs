@@ -1,5 +1,6 @@
 use std::fs;
 
+mod ast;
 mod lexer;
 mod token;
 
