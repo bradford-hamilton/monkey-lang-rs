@@ -12,6 +12,7 @@ fn main() {
         Err(error) => panic!("error reading file {}: {}", filename, error),
     };
     let lexer = lexer::Lexer::new(input);
+    let parser = parser::Parser::new(lexer);
 
     println!("heyo from the end");
 }

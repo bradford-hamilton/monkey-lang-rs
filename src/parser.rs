@@ -1,6 +1,8 @@
 use crate::ast::{
-    BlockStatement, Boolean, Expression, Identifier, IfExpression, InfixExpression, IntegerLiteral,
-    LetStatement, PrefixExpression, Statement, ZeroValueExpression, ZeroValueStatement,
+    ArrayLiteral, BlockStatement, Boolean, ConstStatement, Expression, ExpressionStatement,
+    FunctionLiteral, HashLiteral, Identifier, IfExpression, InfixExpression, IntegerLiteral,
+    LetStatement, PrefixExpression, ReturnStatement, Statement, StringLiteral, ZeroValueExpression,
+    ZeroValueStatement,
 };
 use crate::lexer::Lexer;
 use crate::token::{Token, TokenType};
@@ -76,8 +78,9 @@ pub struct Parser {
 }
 
 impl Parser {
-    /// New takes a Lexer, creates a Parser with that Lexer, sets the
-    /// current and peek tokens, and returns the Parser.
+    /// New creates a Parser with the given Lexer, registers all
+    /// parser prefix/infix/postfix functions, and sets the current
+    /// and peek tokens.
     pub fn new(lexer: Lexer) -> Parser {
         let mut parser = Parser {
             lexer,
@@ -111,12 +114,32 @@ impl Parser {
         parser.register_prefix(TokenType::FALSE, parse_boolean);
         parser.register_prefix(TokenType::LEFT_PAREN, parse_grouped_expr);
         parser.register_prefix(TokenType::IF, parse_if_expr);
+        parser.register_prefix(TokenType::FUNCTION, parse_function_literal);
+        parser.register_prefix(TokenType::STRING, parse_string_literal);
+        parser.register_prefix(TokenType::LEFT_BRACKET, parse_array_literal);
+        parser.register_prefix(TokenType::LEFT_BRACE, parse_hash_literal);
 
         // Register all of our infix parse funcs
         parser.register_infix(TokenType::PLUS, parse_infix_expr);
+        parser.register_infix(TokenType::MINUS, parse_infix_expr);
+        parser.register_infix(TokenType::SLASH, parse_infix_expr);
+        parser.register_infix(TokenType::STAR, parse_infix_expr);
+        parser.register_infix(TokenType::MOD, parse_infix_expr);
+        parser.register_infix(TokenType::EQUAL_EQUAL, parse_infix_expr);
+        parser.register_infix(TokenType::BANG_EQUAL, parse_infix_expr);
+        parser.register_infix(TokenType::LESS, parse_infix_expr);
+        parser.register_infix(TokenType::GREATER, parse_infix_expr);
+        parser.register_infix(TokenType::LESS_EQUAL, parse_infix_expr);
+        parser.register_infix(TokenType::GREATER_EQUAL, parse_infix_expr);
+        parser.register_infix(TokenType::LEFT_PAREN, parse_call_expr);
+        parser.register_infix(TokenType::LEFT_BRACKET, parse_index_expr);
+        parser.register_infix(TokenType::AND, parse_infix_expr);
+        parser.register_infix(TokenType::OR, parse_infix_expr);
 
+        // TODO:
         // Register all of our postfix parse funcs
-        // TODO...parser.register_postfix();
+        // p.registerPostfix(token.PlusPlus, p.parsePostfixExpression)
+        // p.registerPostfix(token.MinusMinus, p.parsePostfixExpression)
 
         // Read two tokens, so currentToken and peekToken are both set.
         parser.next_token();
@@ -172,7 +195,7 @@ impl Parser {
         return false;
     }
 
-    fn parse_expr(&mut self, precedence: OpPrecedence) -> Option<Box<dyn Expression>> {
+    fn parse_expression(&mut self, precedence: OpPrecedence) -> Option<Box<dyn Expression>> {
         let prefix = match self.prefix_parse_funcs.get(&self.current_token.token_type) {
             Some(&func) => func,
             _ => {
@@ -199,6 +222,56 @@ impl Parser {
         Some(left_expr)
     }
 
+    fn parse_expression_list(&mut self, end: TokenType) -> Vec<Box<dyn Expression>> {
+        let mut list: Vec<Box<dyn Expression>> = vec![Box::new(ZeroValueExpression {})];
+
+        if self.peek_token_type_is(end) {
+            self.next_token();
+            return list;
+        }
+
+        self.next_token();
+
+        let expr = match self.parse_expression(OpPrecedence::Lowest) {
+            Some(expr) => expr,
+            _ => {
+                let msg = format!(
+                    "Line {}: Failed to parse expression {}.",
+                    self.current_token.line, self.current_token.literal
+                );
+                self.errors.push(msg);
+                Box::new(ZeroValueExpression {})
+            }
+        };
+
+        list.push(expr);
+
+        while self.peek_token_type_is(TokenType::COMMA) {
+            self.next_token();
+            self.next_token();
+
+            let expr = match self.parse_expression(OpPrecedence::Lowest) {
+                Some(expr) => expr,
+                _ => {
+                    let msg = format!(
+                        "Line {}: Failed to parse expression {}.",
+                        self.current_token.line, self.current_token.literal
+                    );
+                    self.errors.push(msg);
+                    Box::new(ZeroValueExpression {})
+                }
+            };
+
+            list.push(expr);
+        }
+
+        if self.expect_peek_type(end) {
+            return vec![Box::new(ZeroValueExpression {})];
+        }
+
+        list
+    }
+
     fn parse_block_statement(&mut self) -> BlockStatement {
         let mut block = BlockStatement {
             token: self.current_token.clone(),
@@ -210,7 +283,7 @@ impl Parser {
         while !self.current_token_type_is(TokenType::RIGHT_BRACE)
             && !self.current_token_type_is(TokenType::EOF)
         {
-            let statement = match self.parse_statement() {
+            match self.parse_statement() {
                 Some(stmt) => stmt,
                 _ => {
                     return BlockStatement {
@@ -239,6 +312,38 @@ impl Parser {
         };
 
         Some(ret)
+    }
+
+    fn parse_function_params(&mut self) -> Vec<Identifier> {
+        let mut identifiers = vec![];
+
+        if self.peek_token_type_is(TokenType::RIGHT_PAREN) {
+            self.next_token();
+            return identifiers;
+        }
+
+        self.next_token();
+
+        identifiers.push(Identifier {
+            token: self.current_token.clone(),
+            value: self.current_token.literal.clone(),
+        });
+
+        while self.peek_token_type_is(TokenType::COMMA) {
+            self.next_token();
+            self.next_token();
+
+            identifiers.push(Identifier {
+                token: self.current_token.clone(),
+                value: self.current_token.literal.clone(),
+            });
+        }
+
+        if !self.expect_peek_type(TokenType::RIGHT_PAREN) {
+            return vec![];
+        }
+
+        identifiers
     }
 
     fn no_prefix_parse_func_error(&mut self, token: Token) {
@@ -286,7 +391,7 @@ fn parse_infix_expr(parser: &mut Parser, left: Box<dyn Expression>) -> Box<dyn E
 
     parser.next_token();
 
-    expr.right = match parser.parse_expr(precedence) {
+    expr.right = match parser.parse_expression(precedence) {
         Some(expr) => expr,
         _ => {
             let msg = format!(
@@ -301,6 +406,13 @@ fn parse_infix_expr(parser: &mut Parser, left: Box<dyn Expression>) -> Box<dyn E
     Box::new(expr)
 }
 
+fn parse_call_expr(parser: &mut Parser, left: Box<dyn Expression>) -> Box<dyn Expression> {
+    todo!();
+}
+fn parse_index_expr(parser: &mut Parser, left: Box<dyn Expression>) -> Box<dyn Expression> {
+    todo!();
+}
+
 fn parse_prefix_expr(parser: &mut Parser) -> Box<dyn Expression> {
     let mut expr = PrefixExpression {
         token: parser.current_token.clone(),
@@ -310,7 +422,7 @@ fn parse_prefix_expr(parser: &mut Parser) -> Box<dyn Expression> {
 
     parser.next_token();
 
-    expr.right = match parser.parse_expr(OpPrecedence::Prefix) {
+    expr.right = match parser.parse_expression(OpPrecedence::Prefix) {
         Some(expr) => expr,
         _ => {
             let msg = format!(
@@ -328,7 +440,7 @@ fn parse_prefix_expr(parser: &mut Parser) -> Box<dyn Expression> {
 fn parse_grouped_expr(parser: &mut Parser) -> Box<dyn Expression> {
     parser.next_token();
 
-    let expr = match parser.parse_expr(OpPrecedence::Lowest) {
+    let expr = match parser.parse_expression(OpPrecedence::Lowest) {
         Some(expr) => expr,
         _ => {
             let msg = format!(
@@ -367,7 +479,7 @@ fn parse_if_expr(parser: &mut Parser) -> Box<dyn Expression> {
 
     parser.next_token();
 
-    expr.condition = match parser.parse_expr(OpPrecedence::Lowest) {
+    expr.condition = match parser.parse_expression(OpPrecedence::Lowest) {
         Some(cond) => cond,
         _ => {
             let msg = format!(
@@ -411,7 +523,7 @@ fn parse_let_statement(parser: &mut Parser) -> Box<dyn Statement> {
         token: zero_value_token,
         value: String::from(""),
     };
-    let mut statement = LetStatement {
+    let mut stmt = LetStatement {
         token: parser.current_token.clone(),
         name: zero_value_identifier,
         value: Box::new(ZeroValueExpression {}),
@@ -421,7 +533,7 @@ fn parse_let_statement(parser: &mut Parser) -> Box<dyn Statement> {
         return Box::new(ZeroValueStatement {});
     }
 
-    statement.name = Identifier {
+    stmt.name = Identifier {
         token: parser.current_token.clone(),
         value: parser.current_token.literal.clone(),
     };
@@ -432,7 +544,7 @@ fn parse_let_statement(parser: &mut Parser) -> Box<dyn Statement> {
 
     parser.next_token();
 
-    statement.value = match parser.parse_expr(OpPrecedence::Lowest) {
+    stmt.value = match parser.parse_expression(OpPrecedence::Lowest) {
         Some(expr) => expr,
         _ => {
             let msg = format!(
@@ -453,17 +565,220 @@ fn parse_let_statement(parser: &mut Parser) -> Box<dyn Statement> {
         parser.next_token();
     }
 
-    Box::new(statement)
+    Box::new(stmt)
 }
 
 fn parse_const_statement(parser: &mut Parser) -> Box<dyn Statement> {
-    todo!()
+    let zero_value_token = Token {
+        token_type: TokenType::NONE,
+        literal: String::from(""),
+        line: 0,
+    };
+    let zero_value_identifier = Identifier {
+        token: zero_value_token,
+        value: String::from(""),
+    };
+    let mut stmt = ConstStatement {
+        token: parser.current_token.clone(),
+        name: zero_value_identifier,
+        value: Box::new(ZeroValueExpression {}),
+    };
+
+    if !parser.expect_peek_type(TokenType::IDENTIFIER) {
+        return Box::new(ZeroValueStatement {});
+    }
+
+    stmt.name = Identifier {
+        token: parser.current_token.clone(),
+        value: parser.current_token.literal.clone(),
+    };
+
+    if !parser.expect_peek_type(TokenType::EQUAL) {
+        return Box::new(ZeroValueStatement {});
+    }
+
+    parser.next_token();
+
+    stmt.value = match parser.parse_expression(OpPrecedence::Lowest) {
+        Some(expr) => expr,
+        _ => {
+            let msg = format!(
+                "Line {}: Failed to parse expression {}.",
+                parser.current_token.line, parser.current_token.literal
+            );
+            parser.errors.push(msg);
+            Box::new(ZeroValueExpression {})
+        }
+    };
+
+    // TODO: Handle function literal piece here
+    // if fl, ok := stmt.Value.(*ast.FunctionLiteral); ok {
+    // 	fl.Name = stmt.Name.Value
+    // }
+
+    if parser.peek_token_type_is(TokenType::SEMICOLON) {
+        parser.next_token();
+    }
+
+    Box::new(stmt)
 }
+
 fn parse_return_statement(parser: &mut Parser) -> Box<dyn Statement> {
-    todo!()
+    let mut stmt = ReturnStatement {
+        token: parser.current_token.clone(),
+        return_value: Box::new(ZeroValueExpression {}),
+    };
+
+    parser.next_token();
+
+    stmt.return_value = match parser.parse_expression(OpPrecedence::Lowest) {
+        Some(expr) => expr,
+        _ => {
+            let msg = format!(
+                "Line {}: Failed to parse expression {}.",
+                parser.current_token.line, parser.current_token.literal,
+            );
+            parser.errors.push(msg);
+            Box::new(ZeroValueExpression {})
+        }
+    };
+
+    if parser.peek_token_type_is(TokenType::SEMICOLON) {
+        parser.next_token();
+    }
+
+    Box::new(stmt)
 }
+
 fn parse_expr_statement(parser: &mut Parser) -> Box<dyn Statement> {
-    todo!()
+    let mut stmt = ExpressionStatement {
+        token: parser.current_token.clone(),
+        expression: Box::new(ZeroValueExpression {}),
+    };
+
+    stmt.expression = match parser.parse_expression(OpPrecedence::Lowest) {
+        Some(expr) => expr,
+        _ => {
+            let msg = format!(
+                "Line {}: Failed to parse expression {}.",
+                parser.current_token.line, parser.current_token.literal,
+            );
+            parser.errors.push(msg);
+            Box::new(ZeroValueExpression {})
+        }
+    };
+
+    if parser.peek_token_type_is(TokenType::SEMICOLON) {
+        parser.next_token();
+    }
+
+    Box::new(stmt)
+}
+
+fn parse_function_literal(parser: &mut Parser) -> Box<dyn Expression> {
+    let zero_value_token = Token {
+        token_type: TokenType::NONE,
+        literal: String::from(""),
+        line: 0,
+    };
+    let mut func_literal = FunctionLiteral {
+        token: parser.current_token.clone(),
+        parameters: vec![],
+        body: BlockStatement {
+            token: zero_value_token,
+            statements: vec![],
+        },
+        name: String::from(""),
+    };
+
+    if !parser.expect_peek_type(TokenType::LEFT_PAREN) {
+        return Box::new(ZeroValueExpression {});
+    }
+
+    func_literal.parameters = parser.parse_function_params();
+
+    if !parser.expect_peek_type(TokenType::LEFT_BRACE) {
+        return Box::new(ZeroValueExpression {});
+    }
+
+    func_literal.body = parser.parse_block_statement();
+
+    Box::new(func_literal)
+}
+
+fn parse_array_literal(parser: &mut Parser) -> Box<dyn Expression> {
+    let mut array = ArrayLiteral {
+        token: parser.current_token.clone(),
+        elements: vec![],
+    };
+
+    array.elements = parser.parse_expression_list(TokenType::RIGHT_BRACKET);
+
+    Box::new(array)
+}
+
+fn parse_hash_literal(parser: &mut Parser) -> Box<dyn Expression> {
+    let mut hash = HashLiteral {
+        token: parser.current_token.clone(),
+        pairs: HashMap::new(),
+    };
+
+    while !parser.peek_token_type_is(TokenType::RIGHT_BRACE) {
+        parser.next_token();
+
+        let key = match parser.parse_expression(OpPrecedence::Lowest) {
+            Some(expr) => expr,
+            _ => {
+                let msg = format!(
+                    "Line {}: Failed to parse expression {}.",
+                    parser.current_token.line, parser.current_token.literal,
+                );
+                parser.errors.push(msg);
+                Box::new(ZeroValueExpression {})
+            }
+        };
+
+        if !parser.expect_peek_type(TokenType::COLON) {
+            return Box::new(ZeroValueExpression {});
+        }
+
+        parser.next_token();
+
+        let value = match parser.parse_expression(OpPrecedence::Lowest) {
+            Some(expr) => expr,
+            _ => {
+                let msg = format!(
+                    "Line {}: Failed to parse expression {}.",
+                    parser.current_token.line, parser.current_token.literal,
+                );
+                parser.errors.push(msg);
+                Box::new(ZeroValueExpression {})
+            }
+        };
+
+        hash.pairs.insert(key.string(), value);
+
+        if !parser.peek_token_type_is(TokenType::RIGHT_BRACE)
+            && !parser.expect_peek_type(TokenType::COMMA)
+        {
+            return Box::new(ZeroValueExpression {});
+        }
+    }
+
+    if !parser.peek_token_type_is(TokenType::RIGHT_BRACE)
+        && !parser.expect_peek_type(TokenType::COMMA)
+    {
+        return Box::new(ZeroValueExpression {});
+    }
+
+    Box::new(hash)
+}
+
+fn parse_string_literal(parser: &mut Parser) -> Box<dyn Expression> {
+    Box::new(StringLiteral {
+        token: parser.current_token.clone(),
+        value: parser.current_token.literal.clone(),
+    })
 }
 
 fn parse_integer_literal(parser: &mut Parser) -> Box<dyn Expression> {
