@@ -860,6 +860,34 @@ mod tests {
         }
     }
 
+    fn test_const_statement(stmt: &Box<dyn Statement>, expected_identifier: &str) {
+        if stmt.token_literal() != "const" {
+            panic!(
+                "statement.token_literal not const: {}",
+                stmt.token_literal()
+            );
+        }
+        if !stmt.as_any().is::<ConstStatement>() {
+            panic!("statement is not a ConstStatement");
+        }
+        let const_statement = stmt.as_any().downcast_ref::<ConstStatement>().unwrap();
+        if const_statement.name.string() != expected_identifier {
+            panic!("incorrect identifier for let statement");
+        }
+    }
+
+    fn test_return_statement(stmt: &Box<dyn Statement>) {
+        if stmt.token_literal() != "return" {
+            panic!(
+                "statement.token_literal is not return: {}",
+                stmt.token_literal()
+            );
+        }
+        if !stmt.as_any().is::<ReturnStatement>() {
+            panic!("statement is not a ReturnStatement");
+        }
+    }
+
     fn test_literal_expression(expr: &Box<dyn Expression>, expected_value: ExpectedValue) {
         match expected_value {
             ExpectedValue::Int(value) => {
@@ -947,6 +975,75 @@ mod tests {
 
             let ls = stmt.as_any().downcast_ref::<LetStatement>().unwrap();
             test_literal_expression(&ls.value, expected_value);
+        }
+    }
+
+    #[test]
+    fn test_const_statements() {
+        let tests = vec![
+            (String::from("const x = 5;"), "x", ExpectedValue::Int(5)),
+            (
+                String::from("const y = true;"),
+                "y",
+                ExpectedValue::Bool(true),
+            ),
+            (
+                String::from("const foobar = y;"),
+                "foobar",
+                ExpectedValue::Ident("y".to_string()),
+            ),
+        ];
+
+        for (input, expected_identifier, expected_value) in tests {
+            let lexer = Lexer::new(input);
+            let mut parser = Parser::new(lexer);
+            let program = parser.parse_program();
+
+            check_parser_errors(&parser);
+            assert_eq!(
+                program.statements.len(),
+                1,
+                "program does not contain 1 statement: contains {} statements",
+                program.statements.len(),
+            );
+
+            let stmt = &program.statements[0];
+            test_const_statement(stmt, expected_identifier);
+
+            let ls = stmt.as_any().downcast_ref::<ConstStatement>().unwrap();
+            test_literal_expression(&ls.value, expected_value);
+        }
+    }
+
+    #[test]
+    fn test_return_statements() {
+        let tests = vec![
+            (String::from("return 5;"), ExpectedValue::Int(5)),
+            (String::from("return true;"), ExpectedValue::Bool(true)),
+            (
+                String::from("return foobar;"),
+                ExpectedValue::Ident("foobar".to_string()),
+            ),
+        ];
+
+        for (input, expected_value) in tests {
+            let lexer = Lexer::new(input);
+            let mut parser = Parser::new(lexer);
+            let program = parser.parse_program();
+
+            check_parser_errors(&parser);
+            assert_eq!(
+                program.statements.len(),
+                1,
+                "program does not contain 1 statement: contains {} statements",
+                program.statements.len(),
+            );
+
+            let stmt = &program.statements[0];
+            test_return_statement(stmt);
+
+            let rs = stmt.as_any().downcast_ref::<ReturnStatement>().unwrap();
+            test_literal_expression(&rs.return_value, expected_value);
         }
     }
 }
