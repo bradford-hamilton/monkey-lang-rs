@@ -1338,6 +1338,7 @@ mod tests {
                 "add(a + b + c * d / f + g)",
                 "add((((a + b) + ((c * d) / f)) + g))",
             ),
+            // TODO: figure out what is broken here, likely to do with arrays
             // (
             //     "a * [1, 2, 3, 4][b * c] * d",
             //     "((a * ([1, 2, 3, 4][(b * c)])) * d)",
