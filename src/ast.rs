@@ -247,8 +247,12 @@ impl Statement for LetStatement {
     }
     /// string - returns a string representation of the LetStatement and satisfies our Node trait
     fn string(&self) -> String {
-        // TODO: actually implement this
-        String::from("LetStatement")
+        format!(
+            "{} {} = {};",
+            self.token.literal,
+            self.name.value,
+            self.value.string(),
+        )
     }
     fn statement_node(&self) {}
     fn as_any(&self) -> &dyn Any {
@@ -270,8 +274,12 @@ impl Statement for ConstStatement {
     }
     /// string - returns a string representation of the ConstStatement and satisfies our Node trait
     fn string(&self) -> String {
-        // TODO: actually implement this
-        String::from("ConstStatement")
+        format!(
+            "{} {} = {};",
+            self.token.literal,
+            self.name.value,
+            self.value.string(),
+        )
     }
     fn statement_node(&self) {}
     fn as_any(&self) -> &dyn Any {
@@ -293,8 +301,7 @@ impl Statement for ReturnStatement {
     }
     /// string - returns a string representation of the ReturnStatement and satisfies our Node trait
     fn string(&self) -> String {
-        // TODO: actually implement this
-        String::from("ReturnStatement")
+        format!("{} {};", self.token.literal, self.return_value.string())
     }
     fn statement_node(&self) {}
     fn as_any(&self) -> &dyn Any {
@@ -343,8 +350,20 @@ impl Expression for FunctionLiteral {
     }
     /// string - returns a string representation of the FunctionLiteral and satisfies our Node trait
     fn string(&self) -> String {
-        // TODO: actually implement them
-        String::from("FunctionLiteral")
+        let params = self
+            .parameters
+            .iter()
+            .map(|p| p.string())
+            .collect::<Vec<String>>()
+            .join(", ");
+
+        let mut result = self.token.literal.clone();
+        if !self.name.borrow().is_empty() {
+            result.push_str(&format!("<{}>", self.name.borrow()));
+        }
+        result.push_str(&format!("({}) {}", params, self.body.string()));
+
+        result
     }
     fn expression_node(&self) {}
     fn as_any(&self) -> &dyn Any {
@@ -387,8 +406,14 @@ impl Expression for ArrayLiteral {
     }
     /// string - returns a string representation of the ArrayLiteral and satisfies our Node trait
     fn string(&self) -> String {
-        // TODO: actually implement them
-        String::from("ArrayLiteral")
+        let elements_str = self
+            .elements
+            .iter()
+            .map(|element| element.string())
+            .collect::<Vec<String>>()
+            .join(", ");
+
+        format!("[{}]", elements_str)
     }
     fn expression_node(&self) {}
     fn as_any(&self) -> &dyn Any {
@@ -410,8 +435,14 @@ impl Expression for HashLiteral {
     }
     /// string - returns a string representation of the HashLiteral and satisfies our Node trait
     fn string(&self) -> String {
-        // TODO: actually implement them
-        String::from("HashLiteral")
+        let pairs = self
+            .pairs
+            .iter()
+            .map(|(key, value)| format!("{}: {}", key, value.string()))
+            .collect::<Vec<String>>()
+            .join(", ");
+
+        format!("{{{}}}", pairs)
     }
     fn expression_node(&self) {}
     fn as_any(&self) -> &dyn Any {
@@ -487,8 +518,7 @@ impl Expression for IndexExpression {
     }
     /// string - returns a string representation of the IndexExpression and satisfies our Node trait
     fn string(&self) -> String {
-        // TODO: actually implement them
-        String::from("IndexExpression")
+        format!("({}[{}])", self.left.string(), self.index.string())
     }
     fn expression_node(&self) {}
     fn as_any(&self) -> &dyn Any {
