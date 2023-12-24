@@ -1,4 +1,5 @@
 use crate::token::Token;
+use std::any::Any;
 use std::collections::HashMap;
 
 /// Node - nodes in our ast will provide a token_literal and string methods for debugging.
@@ -12,6 +13,7 @@ pub trait Statement {
     fn token_literal(&self) -> String;
     fn string(&self) -> String;
     fn statement_node(&self);
+    fn as_any(&self) -> &dyn Any;
 }
 
 /// Expression - must provide expression_node, token_literal, and string methods. Expressions produce values.
@@ -19,11 +21,12 @@ pub trait Expression {
     fn token_literal(&self) -> String;
     fn string(&self) -> String;
     fn expression_node(&self);
+    fn as_any(&self) -> &dyn Any;
 }
 
 /// RootNode of every AST our parser produces.
-struct RootNode {
-    statements: Vec<Box<dyn Statement>>,
+pub struct RootNode {
+    pub statements: Vec<Box<dyn Statement>>,
 }
 
 impl RootNode {
@@ -55,6 +58,9 @@ impl Expression for ZeroValueExpression {
         String::from("zero value")
     }
     fn expression_node(&self) {}
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 /// ZeroValueStatement is used for initializations.
@@ -67,6 +73,9 @@ impl Statement for ZeroValueStatement {
         String::from("zero value")
     }
     fn statement_node(&self) {}
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 /// Identifier - holds IDENTIFIER token and it's value (add, foobar, x, y, ...).
@@ -85,6 +94,9 @@ impl Expression for Identifier {
         self.value.clone()
     }
     fn expression_node(&self) {}
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 /// IntegerLiteral - holds the token and it's value (int64)
@@ -103,6 +115,9 @@ impl Expression for IntegerLiteral {
         self.token.literal.clone()
     }
     fn expression_node(&self) {}
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 /// PrefixExpression - holds the token, a string version of the operator, and the expression to the right of it
@@ -130,6 +145,9 @@ impl Expression for PrefixExpression {
         buf
     }
     fn expression_node(&self) {}
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 /// Boolean - holds the token and it's value (a boolean).
@@ -150,6 +168,9 @@ impl Expression for Boolean {
         self.token.literal.clone()
     }
     fn expression_node(&self) {}
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 /// IfExpression - holds the token, the condition expression and the consequence & alternative
@@ -180,8 +201,10 @@ impl Expression for IfExpression {
         // }
         buf
     }
-
     fn expression_node(&self) {}
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 /// BlockStatement - holds the token "{", and a slice of statements
@@ -201,6 +224,9 @@ impl Statement for BlockStatement {
         "BlockStatement".to_owned()
     }
     fn statement_node(&self) {}
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 impl Expression for BlockStatement {
@@ -214,6 +240,9 @@ impl Expression for BlockStatement {
         String::from("BlockStatement")
     }
     fn expression_node(&self) {}
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 /// LetStatement - Name holds the identifier of the binding and Value for the expression that produces the value.
@@ -224,16 +253,19 @@ pub struct LetStatement {
 }
 
 impl Statement for LetStatement {
-    /// token_literal returns the LetStatement's literal and satisfies the Node interface.
+    /// token_literal returns the LetStatement's literal and satisfies the Node trait.
     fn token_literal(&self) -> String {
         self.token.literal.clone()
     }
-    /// string - returns a string representation of the LetStatement and satisfies our Node interface
+    /// string - returns a string representation of the LetStatement and satisfies our Node trait
     fn string(&self) -> String {
         // TODO: actually implement this
         String::from("LetStatement")
     }
     fn statement_node(&self) {}
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 /// ConstStatement - Name holds the identifier of the binding and value for the expression that produces the value.
@@ -244,16 +276,19 @@ pub struct ConstStatement {
 }
 
 impl Statement for ConstStatement {
-    /// token_literal returns the ConstStatement's literal and satisfies the Node interface.
+    /// token_literal returns the ConstStatement's literal and satisfies the Node trait.
     fn token_literal(&self) -> String {
         self.token.literal.clone()
     }
-    /// string - returns a string representation of the ConstStatement and satisfies our Node interface
+    /// string - returns a string representation of the ConstStatement and satisfies our Node trait
     fn string(&self) -> String {
         // TODO: actually implement this
         String::from("ConstStatement")
     }
     fn statement_node(&self) {}
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 /// ReturnStatement - pretty self explanatory, holds RETURN token and return value
@@ -264,16 +299,19 @@ pub struct ReturnStatement {
 }
 
 impl Statement for ReturnStatement {
-    /// token_literal returns the ReturnStatement's literal and satisfies the Node interface.
+    /// token_literal returns the ReturnStatement's literal and satisfies the Node trait.
     fn token_literal(&self) -> String {
         self.token.literal.clone()
     }
-    /// string - returns a string representation of the ReturnStatement and satisfies our Node interface
+    /// string - returns a string representation of the ReturnStatement and satisfies our Node trait
     fn string(&self) -> String {
         // TODO: actually implement this
         String::from("ReturnStatement")
     }
     fn statement_node(&self) {}
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 /// ExpressionStatement - holds the first token of the expression and the expression
@@ -284,16 +322,19 @@ pub struct ExpressionStatement {
 }
 
 impl Statement for ExpressionStatement {
-    /// token_literal returns the ExpressionStatement's literal and satisfies the Node interface.
+    /// token_literal returns the ExpressionStatement's literal and satisfies the Node trait.
     fn token_literal(&self) -> String {
         self.token.literal.clone()
     }
-    /// string - returns a string representation of the ExpressionStatement and satisfies our Node interface
+    /// string - returns a string representation of the ExpressionStatement and satisfies our Node trait
     fn string(&self) -> String {
         // TODO: actually implement this
         String::from("ExpressionStatement")
     }
     fn statement_node(&self) {}
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 /// FunctionLiteral - holds the token, the function params (a vec of Identifier), and
@@ -306,16 +347,19 @@ pub struct FunctionLiteral {
 }
 
 impl Expression for FunctionLiteral {
-    /// token_literal returns the FunctionLiteral's literal and satisfies the Node interface.
+    /// token_literal returns the FunctionLiteral's literal and satisfies the Node trait.
     fn token_literal(&self) -> String {
         self.token.literal.clone()
     }
-    /// string - returns a string representation of the FunctionLiteral and satisfies our Node interface
+    /// string - returns a string representation of the FunctionLiteral and satisfies our Node trait
     fn string(&self) -> String {
         // TODO: actually implement them
         String::from("FunctionLiteral")
     }
     fn expression_node(&self) {}
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 /// StringLiteral holds the token and it's value (string)
@@ -325,15 +369,18 @@ pub struct StringLiteral {
 }
 
 impl Expression for StringLiteral {
-    /// token_literal returns the StringLiteral's literal and satisfies the Node interface.
+    /// token_literal returns the StringLiteral's literal and satisfies the Node trait.
     fn token_literal(&self) -> String {
         self.token.literal.clone()
     }
-    /// string - returns a string representation of the StringLiteral and satisfies our Node interface
+    /// string - returns a string representation of the StringLiteral and satisfies our Node trait
     fn string(&self) -> String {
         self.token.literal.clone()
     }
     fn expression_node(&self) {}
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 /// ArrayLiteral holds the token: '[' and an array of expressions (Elements)
@@ -344,16 +391,19 @@ pub struct ArrayLiteral {
 }
 
 impl Expression for ArrayLiteral {
-    /// token_literal returns the ArrayLiteral's literal and satisfies the Node interface.
+    /// token_literal returns the ArrayLiteral's literal and satisfies the Node trait.
     fn token_literal(&self) -> String {
         self.token.literal.clone()
     }
-    /// string - returns a string representation of the ArrayLiteral and satisfies our Node interface
+    /// string - returns a string representation of the ArrayLiteral and satisfies our Node trait
     fn string(&self) -> String {
         // TODO: actually implement them
         String::from("ArrayLiteral")
     }
     fn expression_node(&self) {}
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 /// HashLiteral holds the '{' token and the pairs in the hash
@@ -364,16 +414,19 @@ pub struct HashLiteral {
 }
 
 impl Expression for HashLiteral {
-    /// token_literal returns the HashLiteral's literal and satisfies the Node interface.
+    /// token_literal returns the HashLiteral's literal and satisfies the Node trait.
     fn token_literal(&self) -> String {
         self.token.literal.clone()
     }
-    /// string - returns a string representation of the HashLiteral and satisfies our Node interface
+    /// string - returns a string representation of the HashLiteral and satisfies our Node trait
     fn string(&self) -> String {
         // TODO: actually implement them
         String::from("HashLiteral")
     }
     fn expression_node(&self) {}
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 /// InfixExpression holds the token, the expression to the left of it, a string version of
@@ -387,16 +440,64 @@ pub struct InfixExpression {
 }
 
 impl Expression for InfixExpression {
-    /// token_literal returns the InfixExpression's literal and satisfies the Node interface.
+    /// token_literal returns the InfixExpression's literal and satisfies the Node trait.
     fn token_literal(&self) -> String {
         self.token.literal.clone()
     }
-    /// string - returns a string representation of the InfixExpression and satisfies our Node interface
+    /// string - returns a string representation of the InfixExpression and satisfies our Node trait
     fn string(&self) -> String {
         // TODO: actually implement them
         String::from("InfixExpression")
     }
     fn expression_node(&self) {}
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 // TODO: add the newer additional types and impls from PR's since the last go at this.
+
+/// CallExpression holds the token, func, and its arguments.
+pub struct CallExpression {
+    pub token: Token,
+    pub func: Box<dyn Expression>,
+    pub arguments: Vec<Box<dyn Expression>>,
+}
+
+impl Expression for CallExpression {
+    /// token_literal returns the CallExpression's literal and satisfies the Node trait.
+    fn token_literal(&self) -> String {
+        self.token.literal.clone()
+    }
+    /// string - returns a string representation of the CallExpression and satisfies our Node trait
+    fn string(&self) -> String {
+        // TODO: actually implement them
+        String::from("CallExpression")
+    }
+    fn expression_node(&self) {}
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+pub struct IndexExpression {
+    pub token: Token,
+    pub left: Box<dyn Expression>,
+    pub index: Box<dyn Expression>,
+}
+
+impl Expression for IndexExpression {
+    /// token_literal returns the IndexExpression's literal and satisfies the Node trait.
+    fn token_literal(&self) -> String {
+        self.token.literal.clone()
+    }
+    /// string - returns a string representation of the IndexExpression and satisfies our Node trait
+    fn string(&self) -> String {
+        // TODO: actually implement them
+        String::from("IndexExpression")
+    }
+    fn expression_node(&self) {}
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}

@@ -1,8 +1,8 @@
 use crate::ast::{
-    ArrayLiteral, BlockStatement, Boolean, ConstStatement, Expression, ExpressionStatement,
-    FunctionLiteral, HashLiteral, Identifier, IfExpression, InfixExpression, IntegerLiteral,
-    LetStatement, PrefixExpression, ReturnStatement, Statement, StringLiteral, ZeroValueExpression,
-    ZeroValueStatement,
+    ArrayLiteral, BlockStatement, Boolean, CallExpression, ConstStatement, Expression,
+    ExpressionStatement, FunctionLiteral, HashLiteral, Identifier, IfExpression, IndexExpression,
+    InfixExpression, IntegerLiteral, LetStatement, PrefixExpression, ReturnStatement, RootNode,
+    Statement, StringLiteral, ZeroValueExpression, ZeroValueStatement,
 };
 use crate::lexer::Lexer;
 use crate::token::{Token, TokenType};
@@ -148,6 +148,22 @@ impl Parser {
         parser
     }
 
+    /// parse_program parses tokens and creates an AST. It returns the RootNode
+    /// which holds a slice of Statements (and in turn, the rest of the tree).
+    pub fn parse_program(&mut self) -> RootNode {
+        let mut root_node = RootNode { statements: vec![] };
+
+        while !self.current_token_type_is(TokenType::Eof) {
+            let stmt = self.parse_statement();
+            if !is_zero_value_statement(&stmt) {
+                root_node.statements.push(stmt);
+            }
+            self.next_token();
+        }
+
+        root_node
+    }
+
     fn register_prefix(&mut self, token_type: TokenType, func: PrefixParseFunc) {
         self.prefix_parse_funcs.insert(token_type, func);
     }
@@ -159,7 +175,7 @@ impl Parser {
     fn next_token(&mut self) {
         self.prev_token = self.current_token.clone();
         self.current_token = self.peek_token.clone();
-        self.peek_token = self.lexer.clone().next_token();
+        self.peek_token = self.lexer.next_token();
     }
 
     fn current_token_precedence(&mut self) -> OpPrecedence {
@@ -284,9 +300,9 @@ impl Parser {
             && !self.current_token_type_is(TokenType::Eof)
         {
             let stmt = self.parse_statement();
-
-            // if stmt == ZeroValueExpression
-
+            if !is_zero_value_statement(&stmt) {
+                block.statements.push(stmt);
+            }
             self.next_token();
         }
 
@@ -394,11 +410,36 @@ fn parse_infix_expr(parser: &mut Parser, left: Box<dyn Expression>) -> Box<dyn E
     Box::new(expr)
 }
 
-fn parse_call_expr(_parser: &mut Parser, _left: Box<dyn Expression>) -> Box<dyn Expression> {
-    todo!();
+fn parse_call_expr(parser: &mut Parser, func: Box<dyn Expression>) -> Box<dyn Expression> {
+    Box::new(CallExpression {
+        token: parser.current_token.clone(),
+        func,
+        arguments: parser.parse_expression_list(TokenType::RightParen),
+    })
 }
-fn parse_index_expr(_parser: &mut Parser, _left: Box<dyn Expression>) -> Box<dyn Expression> {
-    todo!();
+
+fn parse_index_expr(parser: &mut Parser, left: Box<dyn Expression>) -> Box<dyn Expression> {
+    let mut expr = IndexExpression {
+        token: parser.current_token.clone(),
+        left,
+        index: Box::new(ZeroValueExpression {}),
+    };
+
+    parser.next_token();
+
+    expr.index = match parser.parse_expression(OpPrecedence::Lowest) {
+        Some(box_expr) => box_expr,
+        _ => {
+            let msg = format!(
+                "Line {}: Failed to parse expression {}.",
+                parser.current_token.line, parser.current_token.literal,
+            );
+            parser.errors.push(msg);
+            Box::new(ZeroValueExpression {})
+        }
+    };
+
+    Box::new(expr)
 }
 
 fn parse_prefix_expr(parser: &mut Parser) -> Box<dyn Expression> {
@@ -783,4 +824,129 @@ fn parse_boolean(parser: &mut Parser) -> Box<dyn Expression> {
         token: parser.current_token.clone(),
         value: parser.current_token_type_is(TokenType::True),
     })
+}
+
+fn is_zero_value_statement(stmt: &Box<dyn Statement>) -> bool {
+    stmt.as_any().is::<ZeroValueStatement>()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    enum ExpectedValue {
+        Int(i64),
+        Bool(bool),
+        Ident(String),
+    }
+
+    fn check_parser_errors(parser: &Parser) {
+        if parser.errors.is_empty() {
+            return;
+        }
+        panic!("parser errors: {:?}", parser.errors);
+    }
+
+    fn test_let_statement(stmt: &Box<dyn Statement>, expected_identifier: &str) {
+        if stmt.token_literal() != "let" {
+            panic!("statement.token_literal not let: {}", stmt.token_literal());
+        }
+        if !stmt.as_any().is::<LetStatement>() {
+            panic!("statement is not a LetStatement");
+        }
+        let let_statement = stmt.as_any().downcast_ref::<LetStatement>().unwrap();
+        if let_statement.name.string() != expected_identifier {
+            panic!("incorrect identifier for let statement");
+        }
+    }
+
+    fn test_literal_expression(expr: &Box<dyn Expression>, expected_value: ExpectedValue) {
+        match expected_value {
+            ExpectedValue::Int(value) => {
+                test_integer_literal(expr, value);
+            }
+            ExpectedValue::Bool(value) => {
+                test_boolean_literal(expr, value);
+            }
+            ExpectedValue::Ident(value) => {
+                test_identifier(expr, value);
+            }
+        }
+    }
+
+    fn test_integer_literal(expr: &Box<dyn Expression>, value: i64) {
+        if !expr.as_any().is::<IntegerLiteral>() {
+            panic!("expression is not an integer literal");
+        }
+        let int_lit = expr.as_any().downcast_ref::<IntegerLiteral>().unwrap();
+        if int_lit.value != value as usize {
+            panic!(
+                "integer literal value incorrect, expected: {}, got: {}",
+                value, int_lit.value,
+            )
+        }
+    }
+
+    fn test_boolean_literal(expr: &Box<dyn Expression>, value: bool) {
+        if !expr.as_any().is::<Boolean>() {
+            panic!("expression is not a boolean");
+        }
+        let boool = expr.as_any().downcast_ref::<Boolean>().unwrap();
+        if boool.value != value {
+            panic!(
+                "boolean value incorrect, expected: {}, got: {}",
+                value, boool.value,
+            )
+        }
+    }
+
+    fn test_identifier(expr: &Box<dyn Expression>, value: String) {
+        if !expr.as_any().is::<Identifier>() {
+            panic!("expression is not a identifier");
+        }
+        let ident = expr.as_any().downcast_ref::<Identifier>().unwrap();
+        if ident.value != value {
+            panic!(
+                "identifier value incorrect, expected: {}, got: {}",
+                value, ident.value,
+            )
+        }
+    }
+
+    #[test]
+    fn test_let_statements() {
+        let tests = vec![
+            (String::from("let x = 5;"), "x", ExpectedValue::Int(5)),
+            (
+                String::from("let y = true;"),
+                "y",
+                ExpectedValue::Bool(true),
+            ),
+            (
+                String::from("let foobar = y;"),
+                "foobar",
+                ExpectedValue::Ident("y".to_string()),
+            ),
+        ];
+
+        for (input, expected_identifier, expected_value) in tests {
+            let lexer = Lexer::new(input);
+            let mut parser = Parser::new(lexer);
+            let program = parser.parse_program();
+
+            check_parser_errors(&parser);
+            assert_eq!(
+                program.statements.len(),
+                1,
+                "program does not contain 1 statement: contains {} statements",
+                program.statements.len(),
+            );
+
+            let stmt = &program.statements[0];
+            test_let_statement(stmt, expected_identifier);
+
+            let ls = stmt.as_any().downcast_ref::<LetStatement>().unwrap();
+            test_literal_expression(&ls.value, expected_value);
+        }
+    }
 }

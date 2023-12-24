@@ -1,6 +1,5 @@
 use crate::token::{look_up_identifier, Token, TokenType};
 
-#[derive(Clone)]
 pub struct Lexer {
     input: Vec<char>,
     current_char: char,
