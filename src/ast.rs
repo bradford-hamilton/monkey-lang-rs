@@ -32,7 +32,7 @@ pub struct RootNode {
 
 impl RootNode {
     /// token_literal returns the RootNode's literal and satisfies the Node trait.
-    fn token_literal(&self) -> String {
+    pub fn token_literal(&self) -> String {
         if !self.statements.is_empty() {
             return self.statements[0].token_literal();
         }
@@ -40,7 +40,7 @@ impl RootNode {
     }
 
     /// string returns a buffer containing the programs Statements as strings.
-    fn string(&self) -> String {
+    pub fn string(&self) -> String {
         let mut statements_string = String::from("");
         for s in &self.statements {
             statements_string += &s.string();
@@ -53,10 +53,10 @@ impl RootNode {
 pub struct ZeroValueExpression {}
 impl Expression for ZeroValueExpression {
     fn token_literal(&self) -> String {
-        String::from("zero value")
+        String::from("zero value expression")
     }
     fn string(&self) -> String {
-        String::from("zero value")
+        String::from("zero value expression")
     }
     fn expression_node(&self) {}
     fn as_any(&self) -> &dyn Any {
@@ -68,10 +68,10 @@ impl Expression for ZeroValueExpression {
 pub struct ZeroValueStatement {}
 impl Statement for ZeroValueStatement {
     fn token_literal(&self) -> String {
-        String::from("zero value")
+        String::from("zero value statement")
     }
     fn string(&self) -> String {
-        String::from("zero value")
+        String::from("zero value statement")
     }
     fn statement_node(&self) {}
     fn as_any(&self) -> &dyn Any {
@@ -190,17 +190,17 @@ impl Expression for IfExpression {
     }
     /// string - returns a string representation of the IfExpression and satisfies our Node trait
     fn string(&self) -> String {
-        let mut buf = "if".to_owned();
-        // TODO: match on condition and get it's Expression
-        // buf += self.condition.string();
-        buf += " ";
-        // buf += self.consequence.string();
-        // TODO: something besides nil
-        // if self.alternative != nil {
-        //     buf += " else ";
-        //     buf += self.alternative.string();
-        // }
-        buf
+        let mut result = format!(
+            "if {} {}",
+            self.condition.string(),
+            self.consequence.string(),
+        );
+
+        if !self.alternative.as_any().is::<ZeroValueStatement>() {
+            result = format!("{} else {}", result, self.alternative.string());
+        }
+
+        result
     }
     fn expression_node(&self) {}
     fn as_any(&self) -> &dyn Any {
@@ -214,22 +214,6 @@ pub struct BlockStatement {
     pub statements: Vec<Box<dyn Statement>>,
 }
 
-impl Statement for BlockStatement {
-    /// token_literal returns the BlockStatement's literal and satisfies the Node trait.
-    fn token_literal(&self) -> String {
-        self.token.literal.clone()
-    }
-    /// string - returns a string representation of the BlockStatement and satisfies our Node trait
-    fn string(&self) -> String {
-        // TODO: loop over self.statements and call .string() on each
-        "BlockStatement".to_owned()
-    }
-    fn statement_node(&self) {}
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
-
 impl Expression for BlockStatement {
     /// token_literal returns the BlockStatement's literal and satisfies the Node trait.
     fn token_literal(&self) -> String {
@@ -237,8 +221,11 @@ impl Expression for BlockStatement {
     }
     /// string - returns a string representation of the BlockStatement and satisfies our Node trait
     fn string(&self) -> String {
-        // TODO: loop over self.statements and call .string() on each
-        String::from("BlockStatement")
+        self.statements
+            .iter()
+            .map(|stmt| stmt.string())
+            .collect::<Vec<String>>()
+            .join("")
     }
     fn expression_node(&self) {}
     fn as_any(&self) -> &dyn Any {
@@ -329,8 +316,10 @@ impl Statement for ExpressionStatement {
     }
     /// string - returns a string representation of the ExpressionStatement and satisfies our Node trait
     fn string(&self) -> String {
-        // TODO: actually implement this
-        String::from("ExpressionStatement")
+        if self.expression.as_any().is::<ZeroValueExpression>() {
+            return String::from("");
+        }
+        self.expression.string()
     }
     fn statement_node(&self) {}
     fn as_any(&self) -> &dyn Any {
@@ -447,8 +436,12 @@ impl Expression for InfixExpression {
     }
     /// string - returns a string representation of the InfixExpression and satisfies our Node trait
     fn string(&self) -> String {
-        // TODO: actually implement them
-        String::from("InfixExpression")
+        format!(
+            "({} {} {})",
+            self.left.string(),
+            self.operator,
+            self.right.string(),
+        )
     }
     fn expression_node(&self) {}
     fn as_any(&self) -> &dyn Any {
@@ -472,8 +465,8 @@ impl Expression for CallExpression {
     }
     /// string - returns a string representation of the CallExpression and satisfies our Node trait
     fn string(&self) -> String {
-        // TODO: actually implement them
-        String::from("CallExpression")
+        let args: Vec<String> = self.arguments.iter().map(|arg| arg.string()).collect();
+        format!("{}({})", self.func.string(), args.join(", "))
     }
     fn expression_node(&self) {}
     fn as_any(&self) -> &dyn Any {

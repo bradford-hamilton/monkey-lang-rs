@@ -240,7 +240,7 @@ impl Parser {
     }
 
     fn parse_expression_list(&mut self, end: TokenType) -> Vec<Box<dyn Expression>> {
-        let mut list: Vec<Box<dyn Expression>> = vec![Box::new(ZeroValueExpression {})];
+        let mut list: Vec<Box<dyn Expression>> = vec![];
 
         if self.peek_token_type_is(end) {
             self.next_token();
@@ -282,7 +282,7 @@ impl Parser {
             list.push(expr);
         }
 
-        if self.expect_peek_type(end) {
+        if !self.expect_peek_type(end) {
             return vec![Box::new(ZeroValueExpression {})];
         }
 
@@ -1111,6 +1111,255 @@ mod tests {
             }
         } else {
             panic!("expression statement is not an integer literal");
+        }
+    }
+
+    #[test]
+    fn test_parsing_prefix_expressions() {
+        let prefix_tests = vec![
+            ("!5;", "!", ExpectedValue::Int(5)),
+            ("-15", "-", ExpectedValue::Int(15)),
+            ("!true", "!", ExpectedValue::Bool(true)),
+            ("!false", "!", ExpectedValue::Bool(false)),
+        ];
+
+        for (input, operator, integer_value) in prefix_tests {
+            let lexer = Lexer::new(input.to_string());
+            let mut parser = Parser::new(lexer);
+            let program = parser.parse_program();
+
+            check_parser_errors(&parser);
+            assert_eq!(
+                program.statements.len(),
+                1,
+                "program does not contain 1 statement: contains {} statements",
+                program.statements.len(),
+            );
+
+            let stmt = &program.statements[0];
+            if !stmt.as_any().is::<ExpressionStatement>() {
+                panic!("statement is not an expression statement");
+            }
+            let expr_stmt = stmt.as_any().downcast_ref::<ExpressionStatement>().unwrap();
+
+            if let Some(prefix_expr) = expr_stmt
+                .expression
+                .as_any()
+                .downcast_ref::<PrefixExpression>()
+            {
+                assert_eq!(
+                    prefix_expr.operator, operator,
+                    "expr.Operator is not '{}'. Got: '{}'",
+                    operator, prefix_expr.operator
+                );
+
+                test_literal_expression(&prefix_expr.right, integer_value);
+            } else {
+                panic!("stmt is not a prefix expression");
+            }
+        }
+    }
+
+    #[test]
+    fn test_parsing_infix_expressions() {
+        let infix_tests = vec![
+            ("5 + 5;", ExpectedValue::Int(5), "+", ExpectedValue::Int(5)),
+            ("5 - 5;", ExpectedValue::Int(5), "-", ExpectedValue::Int(5)),
+            ("5 * 5;", ExpectedValue::Int(5), "*", ExpectedValue::Int(5)),
+            ("5 / 5;", ExpectedValue::Int(5), "/", ExpectedValue::Int(5)),
+            ("5 > 5;", ExpectedValue::Int(5), ">", ExpectedValue::Int(5)),
+            ("5 < 5;", ExpectedValue::Int(5), "<", ExpectedValue::Int(5)),
+            (
+                "5 >= 5;",
+                ExpectedValue::Int(5),
+                ">=",
+                ExpectedValue::Int(5),
+            ),
+            (
+                "5 <= 5;",
+                ExpectedValue::Int(5),
+                "<=",
+                ExpectedValue::Int(5),
+            ),
+            (
+                "5 == 5;",
+                ExpectedValue::Int(5),
+                "==",
+                ExpectedValue::Int(5),
+            ),
+            (
+                "5 != 5;",
+                ExpectedValue::Int(5),
+                "!=",
+                ExpectedValue::Int(5),
+            ),
+            (
+                "true == true",
+                ExpectedValue::Bool(true),
+                "==",
+                ExpectedValue::Bool(true),
+            ),
+            (
+                "true != false",
+                ExpectedValue::Bool(true),
+                "!=",
+                ExpectedValue::Bool(false),
+            ),
+            (
+                "false == false",
+                ExpectedValue::Bool(false),
+                "==",
+                ExpectedValue::Bool(false),
+            ),
+            (
+                "true && false",
+                ExpectedValue::Bool(true),
+                "&&",
+                ExpectedValue::Bool(false),
+            ),
+            (
+                "true || false",
+                ExpectedValue::Bool(true),
+                "||",
+                ExpectedValue::Bool(false),
+            ),
+            ("10 % 3", ExpectedValue::Int(10), "%", ExpectedValue::Int(3)),
+        ];
+
+        for (input, left_value, operator, right_value) in infix_tests {
+            let lexer = Lexer::new(input.to_string());
+            let mut parser = Parser::new(lexer);
+            let program = parser.parse_program();
+
+            check_parser_errors(&parser);
+            assert_eq!(
+                program.statements.len(),
+                1,
+                "program does not contain 1 statement: contains {} statements",
+                program.statements.len(),
+            );
+
+            let stmt = &program.statements[0];
+            if !stmt.as_any().is::<ExpressionStatement>() {
+                panic!("statement is not an expression statement");
+            }
+            let expr_stmt = stmt.as_any().downcast_ref::<ExpressionStatement>().unwrap();
+
+            if let Some(infix_expr) = expr_stmt
+                .expression
+                .as_any()
+                .downcast_ref::<InfixExpression>()
+            {
+                assert_eq!(infix_expr.operator, operator);
+                test_literal_expression(&infix_expr.left, left_value);
+                test_literal_expression(&infix_expr.right, right_value);
+            } else {
+                panic!("stmt is not an infix expression");
+            }
+        }
+    }
+
+    // TODO: finish after finishing postfix expressions
+    // #[test]
+    // fn test_parsing_postfix_expressions() {
+    //     let postfix_tests = vec![("five++", "++"), ("five--", "--")];
+
+    //     for (input, operator) in postfix_tests {
+    //         let lexer = Lexer::new(input.to_string());
+    //         let mut parser = Parser::new(lexer);
+    //         let program = parser.parse_program();
+
+    //         check_parser_errors(&parser);
+    //         assert_eq!(
+    //             program.statements.len(),
+    //             1,
+    //             "program does not contain 1 statement: contains {} statements",
+    //             program.statements.len(),
+    //         );
+
+    //         let stmt = &program.statements[0];
+    //         if !stmt.as_any().is::<ExpressionStatement>() {
+    //             panic!("statement is not an expression statement");
+    //         }
+    //         let expr_stmt = stmt.as_any().downcast_ref::<ExpressionStatement>().unwrap();
+
+    //         if let Some(postfix_expr) = expr_stmt
+    //             .expression
+    //             .as_any()
+    //             .downcast_ref::<PostfixExpression>()
+    //         {
+    //             assert_eq!(
+    //                 postfix_expr.operator, operator,
+    //                 "expr.Operator is not '{}'. Got: '{}'",
+    //                 operator, postfix_expr.operator
+    //             );
+    //         } else {
+    //             panic!("stmt is not a postfix expression");
+    //         }
+    //     }
+    // }
+
+    #[test]
+    fn test_operator_precedence_parsing() {
+        let tests = vec![
+            // ("-a * b", "((-a) * b)"),
+            // ("!-a", "(!(-a))"),
+            // ("a + b + c", "((a + b) + c)"),
+            // ("a + b - c", "((a + b) - c)"),
+            // ("a * b * c", "((a * b) * c)"),
+            // ("a * b / c", "((a * b) / c)"),
+            // ("a + b / c", "(a + (b / c))"),
+            // ("a + b * c + d / e - f", "(((a + (b * c)) + (d / e)) - f)"),
+            // ("3 + 4; -5 * 5", "(3 + 4)((-5) * 5)"),
+            // ("5 > 4 == 3 < 4", "((5 > 4) == (3 < 4))"),
+            // ("5 < 4 != 3 > 4", "((5 < 4) != (3 > 4))"),
+            // (
+            //     "3 + 4 * 5 == 3 * 1 + 4 * 5",
+            //     "((3 + (4 * 5)) == ((3 * 1) + (4 * 5)))",
+            // ),
+            // ("true", "true"),
+            // ("false", "false"),
+            // ("3 > 5 == false", "((3 > 5) == false)"),
+            // ("3 < 5 == true", "((3 < 5) == true)"),
+            // ("3 >= 5 == false", "((3 >= 5) == false)"),
+            // ("3 <= 5 == true", "((3 <= 5) == true)"),
+            // ("1 + (2 + 3) + 4", "((1 + (2 + 3)) + 4)"),
+            // ("(5 + 5) * 2", "((5 + 5) * 2)"),
+            // ("2 / (5 + 5)", "(2 / (5 + 5))"),
+            // ("(5 + 5) * 2 * (5 + 5)", "(((5 + 5) * 2) * (5 + 5))"),
+            // ("-(5 + 5)", "(-(5 + 5))"),
+            // ("!(true == true)", "(!(true == true))"),
+            ("a + add(b * c) + d", "((a + add((b * c))) + d)"),
+            // (
+            //     "add(a, b, 1, 2 * 3, 4 + 5, add(6, 7 * 8))",
+            //     "add(a, b, 1, (2 * 3), (4 + 5), add(6, (7 * 8)))",
+            // ),
+            // (
+            //     "add(a + b + c * d / f + g)",
+            //     "add((((a + b) + ((c * d) / f)) + g))",
+            // ),
+            // (
+            //     "a * [1, 2, 3, 4][b * c] * d",
+            //     "((a * ([1, 2, 3, 4][(b * c)])) * d)",
+            // ),
+            // (
+            //     "add(a * b[2], b[1], 2 * [1, 2][1])",
+            //     "add((a * (b[2])), (b[1]), (2 * ([1, 2][1])))",
+            // ),
+        ];
+
+        for (input, expected) in tests {
+            let lexer = Lexer::new(input.to_string());
+            let mut parser = Parser::new(lexer);
+            let program = parser.parse_program();
+
+            check_parser_errors(&parser);
+            let actual = program.string();
+
+            println!("!!!!ACTUAL: {}", actual);
+            println!("!!!!ERRORS: {:?}", parser.errors);
+
+            assert_eq!(actual, expected, "Expected: {}, got: {}", expected, actual);
         }
     }
 }
