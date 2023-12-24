@@ -7,6 +7,7 @@ use crate::ast::{
 use crate::lexer::Lexer;
 use crate::token::{Token, TokenType};
 use lazy_static::lazy_static;
+use std::cell::RefCell;
 use std::collections::HashMap;
 
 /// Operator precedence table.
@@ -585,10 +586,9 @@ fn parse_let_statement(parser: &mut Parser) -> Box<dyn Statement> {
         }
     };
 
-    // TODO: Handle function literal piece here
-    // if fl, ok := stmt.Value.(*ast.FunctionLiteral); ok {
-    // 	fl.Name = stmt.Name.Value
-    // }
+    if let Some(func_literal) = stmt.value.as_any().downcast_ref::<FunctionLiteral>() {
+        *func_literal.name.borrow_mut() = stmt.name.value.clone();
+    }
 
     if parser.peek_token_type_is(TokenType::Semicolon) {
         parser.next_token();
@@ -640,10 +640,9 @@ fn parse_const_statement(parser: &mut Parser) -> Box<dyn Statement> {
         }
     };
 
-    // TODO: Handle function literal piece here
-    // if fl, ok := stmt.Value.(*ast.FunctionLiteral); ok {
-    // 	fl.Name = stmt.Name.Value
-    // }
+    if let Some(func_literal) = stmt.value.as_any().downcast_ref::<FunctionLiteral>() {
+        *func_literal.name.borrow_mut() = stmt.name.value.clone();
+    }
 
     if parser.peek_token_type_is(TokenType::Semicolon) {
         parser.next_token();
@@ -717,7 +716,7 @@ fn parse_function_literal(parser: &mut Parser) -> Box<dyn Expression> {
             token: zero_value_token,
             statements: vec![],
         },
-        name: String::from(""),
+        name: RefCell::new(String::from("")),
     };
 
     if !parser.expect_peek_type(TokenType::LeftParen) {
@@ -1044,6 +1043,74 @@ mod tests {
 
             let rs = stmt.as_any().downcast_ref::<ReturnStatement>().unwrap();
             test_literal_expression(&rs.return_value, expected_value);
+        }
+    }
+
+    #[test]
+    fn test_identifier_expressions() {
+        let input = String::from("foobar;");
+        let lexer = Lexer::new(input);
+        let mut parser = Parser::new(lexer);
+        let program = parser.parse_program();
+
+        check_parser_errors(&parser);
+        assert_eq!(
+            program.statements.len(),
+            1,
+            "program does not contain 1 statement: contains {} statements",
+            program.statements.len(),
+        );
+
+        let stmt = &program.statements[0];
+        if !stmt.as_any().is::<ExpressionStatement>() {
+            panic!("expression is not an expression statement");
+        }
+        let exp_stmt = stmt.as_any().downcast_ref::<ExpressionStatement>().unwrap();
+        if let Some(identifier) = &exp_stmt.expression.as_any().downcast_ref::<Identifier>() {
+            if identifier.value != "foobar" {}
+        } else {
+            panic!("expression statement's expression is not an identifier");
+        }
+    }
+
+    #[test]
+    fn test_integer_literal_expressions() {
+        let input = String::from("5;");
+        let lexer = Lexer::new(input);
+        let mut parser = Parser::new(lexer);
+        let program = parser.parse_program();
+
+        check_parser_errors(&parser);
+        assert_eq!(
+            program.statements.len(),
+            1,
+            "program does not contain 1 statement: contains {} statements",
+            program.statements.len(),
+        );
+
+        let stmt = &program.statements[0];
+        if !stmt.as_any().is::<ExpressionStatement>() {
+            panic!(
+                "statement is not an expression statement: {:?}, {:?}",
+                stmt.as_ref().token_literal(),
+                stmt.as_ref().string()
+            );
+        }
+        let expr_stmt = stmt.as_any().downcast_ref::<ExpressionStatement>().unwrap();
+
+        if let Some(int_lit) = expr_stmt
+            .expression
+            .as_any()
+            .downcast_ref::<IntegerLiteral>()
+        {
+            if int_lit.value != 5 {
+                panic!(
+                    "integer literal's value incorrect, expected: {}, got: {}",
+                    5, int_lit.value
+                );
+            }
+        } else {
+            panic!("expression statement is not an integer literal");
         }
     }
 }

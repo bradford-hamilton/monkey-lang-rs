@@ -1,5 +1,6 @@
 use crate::token::Token;
 use std::any::Any;
+use std::cell::RefCell;
 use std::collections::HashMap;
 
 /// Node - nodes in our ast will provide a token_literal and string methods for debugging.
@@ -343,7 +344,7 @@ pub struct FunctionLiteral {
     pub token: Token, // The 'func' token
     pub parameters: Vec<Identifier>,
     pub body: BlockStatement,
-    pub name: String,
+    pub name: RefCell<String>,
 }
 
 impl Expression for FunctionLiteral {
