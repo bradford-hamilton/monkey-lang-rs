@@ -940,6 +940,22 @@ mod tests {
         }
     }
 
+    fn test_infix_expression(expr: &Box<dyn Expression>, left: &str, operator: &str, right: &str) {
+        let infix = expr.as_any().downcast_ref::<InfixExpression>().unwrap();
+        let ev_left = ExpectedValue::Ident(left.to_string());
+        test_literal_expression(&infix.left, ev_left);
+
+        if infix.operator != operator {
+            panic!(
+                "infix.operator incorrect, got: {}, expected: {}",
+                infix.operator, operator
+            );
+        }
+
+        let ev_right = ExpectedValue::Ident(right.to_string());
+        test_literal_expression(&infix.right, ev_right);
+    }
+
     #[test]
     fn test_let_statements() {
         let tests = vec![
@@ -1358,5 +1374,225 @@ mod tests {
 
             assert_eq!(expected, actual, "Expected: {}, got: {}", expected, actual);
         }
+    }
+
+    #[test]
+    fn test_boolean_expression() {
+        let tests = vec![("true", true), ("false", false)];
+
+        for (input, expected_bool) in tests {
+            let lexer = Lexer::new(input.to_string());
+            let mut parser = Parser::new(lexer);
+            let program = parser.parse_program();
+
+            check_parser_errors(&parser);
+
+            assert_eq!(
+                program.statements.len(),
+                1,
+                "program doesn't have enough statements. Got: {}",
+                program.statements.len()
+            );
+
+            let stmt = &program.statements[0];
+            if !stmt.as_any().is::<ExpressionStatement>() {
+                panic!("statement is not an expression statement");
+            }
+            let expr_stmt = stmt.as_any().downcast_ref::<ExpressionStatement>().unwrap();
+
+            if let Some(boolean) = expr_stmt.expression.as_any().downcast_ref::<Boolean>() {
+                assert_eq!(
+                    boolean.value, expected_bool,
+                    "boolean.Value not {}. Got: {}",
+                    expected_bool, boolean.value
+                );
+            } else {
+                panic!("statement is not a boolean");
+            }
+        }
+    }
+
+    #[test]
+    fn test_if_expression() {
+        let input = "if (x < y) { x }";
+        let lexer = Lexer::new(input.to_string());
+        let mut parser = Parser::new(lexer);
+        let program = parser.parse_program();
+
+        check_parser_errors(&parser);
+
+        assert_eq!(
+            program.statements.len(),
+            1,
+            "program doesn't contain 1 statement. Got: {}",
+            program.statements.len()
+        );
+
+        let stmt = &program.statements[0];
+        if !stmt.as_any().is::<ExpressionStatement>() {
+            panic!("statement is not an expression statement");
+        }
+        let expr_stmt = stmt.as_any().downcast_ref::<ExpressionStatement>().unwrap();
+
+        if !expr_stmt.expression.as_any().is::<IfExpression>() {
+            panic!("statement is not an if expression");
+        }
+        let if_expr = expr_stmt
+            .expression
+            .as_any()
+            .downcast_ref::<IfExpression>()
+            .unwrap();
+
+        test_infix_expression(&if_expr.condition, "x", "<", "y");
+
+        assert_eq!(
+            if_expr.consequence.statements.len(),
+            1,
+            "Consequence is not 1 statement. Got: {}",
+            if_expr.consequence.statements.len()
+        );
+
+        if !if_expr.consequence.statements[0]
+            .as_any()
+            .is::<ExpressionStatement>()
+        {
+            panic!("if expression not an expression statement");
+        }
+
+        let consequenc_statement = if_expr.consequence.statements[0]
+            .as_any()
+            .downcast_ref::<ExpressionStatement>()
+            .unwrap();
+
+        test_identifier(&consequenc_statement.expression, String::from("x"));
+
+        if if_expr.alternative.as_any().is::<ZeroValueStatement>() {
+            panic!("the if expression's alternative was not nil");
+        }
+    }
+
+    #[test]
+    fn test_if_else_expression() {
+        let input = "if (x < y) { x } else { y }";
+        let lexer = Lexer::new(input.to_string());
+        let mut parser = Parser::new(lexer);
+        let program = parser.parse_program();
+
+        check_parser_errors(&parser);
+
+        assert_eq!(
+            program.statements.len(),
+            1,
+            "program doesn't contain 1 statement. Got: {}",
+            program.statements.len()
+        );
+
+        let stmt = &program.statements[0];
+        if !stmt.as_any().is::<ExpressionStatement>() {
+            panic!("statement is not an expression statement");
+        }
+        let expr_stmt = stmt.as_any().downcast_ref::<ExpressionStatement>().unwrap();
+
+        if !expr_stmt.expression.as_any().is::<IfExpression>() {
+            panic!("statement is not an if expression");
+        }
+        let if_expr = expr_stmt
+            .expression
+            .as_any()
+            .downcast_ref::<IfExpression>()
+            .unwrap();
+
+        test_infix_expression(&if_expr.condition, "x", "<", "y");
+
+        assert_eq!(
+            if_expr.consequence.statements.len(),
+            1,
+            "Consequence is not 1 statement. Got: {}",
+            if_expr.consequence.statements.len()
+        );
+
+        let consequence_statement = if_expr.consequence.statements[0]
+            .as_any()
+            .downcast_ref::<ExpressionStatement>()
+            .unwrap();
+
+        test_identifier(&consequence_statement.expression, String::from("x"));
+
+        assert_eq!(
+            if_expr.alternative.statements.len(),
+            1,
+            "Alternative does not contain 1 statement. Got: {}",
+            if_expr.alternative.statements.len()
+        );
+
+        let alternative_statement = if_expr.alternative.statements[0]
+            .as_any()
+            .downcast_ref::<ExpressionStatement>()
+            .unwrap();
+
+        test_identifier(&alternative_statement.expression, String::from("y"));
+    }
+
+    #[test]
+    fn test_function_literal_parsing() {
+        let input = "func(x, y) { x + y; }";
+        let lexer = Lexer::new(input.to_string());
+        let mut parser = Parser::new(lexer);
+        let program = parser.parse_program();
+
+        check_parser_errors(&parser);
+
+        assert_eq!(
+            program.statements.len(),
+            1,
+            "program doesn't contain 1 statement. Got: {}",
+            program.statements.len()
+        );
+
+        let stmt = &program.statements[0];
+        if !stmt.as_any().is::<ExpressionStatement>() {
+            panic!("statement is not an expression statement");
+        }
+        let expr_stmt = stmt.as_any().downcast_ref::<ExpressionStatement>().unwrap();
+
+        if !expr_stmt.expression.as_any().is::<FunctionLiteral>() {
+            panic!("statement is not a function literal");
+        }
+        let function = expr_stmt
+            .expression
+            .as_any()
+            .downcast_ref::<FunctionLiteral>()
+            .unwrap();
+
+        assert_eq!(
+            function.parameters.len(),
+            2,
+            "function literal parameters wrong. Expected: 2, Got: {}",
+            function.parameters.len()
+        );
+
+        let identifier_1 = function.parameters[0].value.clone();
+        let identifier_2 = function.parameters[1].value.clone();
+
+        assert_eq!(identifier_1, "x");
+        assert_eq!(identifier_2, "y");
+
+        assert_eq!(
+            function.body.statements.len(),
+            1,
+            "function.body.statements wrong number of statements. Expected: 1, Got: {}",
+            function.body.statements.len()
+        );
+
+        let body_stmt = &function.body.statements[0];
+        if !body_stmt.as_any().is::<ExpressionStatement>() {
+            panic!("body statement is not an expression statement");
+        }
+        let body = body_stmt
+            .as_any()
+            .downcast_ref::<ExpressionStatement>()
+            .unwrap();
+
+        test_infix_expression(&body.expression, "x", "+", "y");
     }
 }
