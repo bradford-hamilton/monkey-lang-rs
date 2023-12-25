@@ -440,6 +440,10 @@ fn parse_index_expr(parser: &mut Parser, left: Box<dyn Expression>) -> Box<dyn E
         }
     };
 
+    if !parser.expect_peek_type(TokenType::RightBracket) {
+        return Box::new(ZeroValueExpression {});
+    }
+
     Box::new(expr)
 }
 
@@ -735,14 +739,10 @@ fn parse_function_literal(parser: &mut Parser) -> Box<dyn Expression> {
 }
 
 fn parse_array_literal(parser: &mut Parser) -> Box<dyn Expression> {
-    let mut array = ArrayLiteral {
+    Box::new(ArrayLiteral {
         token: parser.current_token.clone(),
-        elements: vec![],
-    };
-
-    array.elements = parser.parse_expression_list(TokenType::RightBracket);
-
-    Box::new(array)
+        elements: parser.parse_expression_list(TokenType::RightBracket),
+    })
 }
 
 fn parse_hash_literal(parser: &mut Parser) -> Box<dyn Expression> {
@@ -1338,15 +1338,14 @@ mod tests {
                 "add(a + b + c * d / f + g)",
                 "add((((a + b) + ((c * d) / f)) + g))",
             ),
-            // TODO: figure out what is broken here, likely to do with arrays
-            // (
-            //     "a * [1, 2, 3, 4][b * c] * d",
-            //     "((a * ([1, 2, 3, 4][(b * c)])) * d)",
-            // ),
-            // (
-            //     "add(a * b[2], b[1], 2 * [1, 2][1])",
-            //     "add((a * (b[2])), (b[1]), (2 * ([1, 2][1])))",
-            // ),
+            (
+                "a * [1, 2, 3, 4][b * c] * d",
+                "((a * ([1, 2, 3, 4][(b * c)])) * d)",
+            ),
+            (
+                "add(a * b[2], b[1], 2 * [1, 2][1])",
+                "add((a * (b[2])), (b[1]), (2 * ([1, 2][1])))",
+            ),
         ];
 
         for (input, expected) in tests {
@@ -1357,7 +1356,7 @@ mod tests {
             check_parser_errors(&parser);
             let actual = program.string();
 
-            assert_eq!(actual, expected, "Expected: {}, got: {}", expected, actual);
+            assert_eq!(expected, actual, "Expected: {}, got: {}", expected, actual);
         }
     }
 }
