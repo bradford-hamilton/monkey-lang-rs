@@ -829,6 +829,8 @@ fn is_zero_value_statement(stmt: &Box<dyn Statement>) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use std::borrow::Borrow;
+
     use super::*;
 
     enum ExpectedValue {
@@ -1952,6 +1954,176 @@ mod tests {
                 Some(value) => test_literal_expression(value, ExpectedValue::Int(expected_value)),
                 None => panic!("Key not found: {}", expected_key),
             }
+        }
+    }
+
+    #[test]
+    fn test_parsing_empty_hash_literal() {
+        let input = "{}";
+        let lexer = Lexer::new(input.to_string());
+        let mut parser = Parser::new(lexer);
+        let program = parser.parse_program();
+
+        check_parser_errors(&parser);
+
+        assert_eq!(
+            program.statements.len(),
+            1,
+            "program doesn't contain 1 statement. Got: {}",
+            program.statements.len()
+        );
+
+        let stmt = &program.statements[0];
+        if !stmt.as_any().is::<ExpressionStatement>() {
+            panic!("stmt is not an expression statement");
+        }
+        let expr_stmt = stmt.as_any().downcast_ref::<ExpressionStatement>().unwrap();
+
+        if !expr_stmt.expression.as_any().is::<HashLiteral>() {
+            panic!("expression statements expression is not a hash literal");
+        }
+        let hash_literal = expr_stmt
+            .expression
+            .as_any()
+            .downcast_ref::<HashLiteral>()
+            .unwrap();
+
+        assert_eq!(
+            hash_literal.pairs.len(),
+            0,
+            "hash.pairs has wrong length. Got: {}",
+            hash_literal.pairs.len()
+        );
+    }
+
+    #[test]
+    fn test_parsing_hash_literals_with_expressions() {
+        let input = "{\"one\": 0 + 1, \"two\": 10 - 8, \"three\": 15 / 5}";
+        let lexer = Lexer::new(input.to_string());
+        let mut parser = Parser::new(lexer);
+        let program = parser.parse_program();
+
+        check_parser_errors(&parser);
+
+        assert_eq!(
+            program.statements.len(),
+            1,
+            "program doesn't contain 1 statement. Got: {}",
+            program.statements.len()
+        );
+
+        let stmt = &program.statements[0];
+        if !stmt.as_any().is::<ExpressionStatement>() {
+            panic!("stmt is not an expression statement");
+        }
+        let expr_stmt = stmt.as_any().downcast_ref::<ExpressionStatement>().unwrap();
+
+        if !expr_stmt.expression.as_any().is::<HashLiteral>() {
+            panic!("expression statements expression is not a hash literal");
+        }
+        let hash_literal = expr_stmt
+            .expression
+            .as_any()
+            .downcast_ref::<HashLiteral>()
+            .unwrap();
+
+        assert_eq!(
+            hash_literal.pairs.len(),
+            3,
+            "hash.pairs has wrong length. Got: {}",
+            hash_literal.pairs.len()
+        );
+
+        let expected_tests = vec![
+            ("one", ExpectedValue::Int(0), "+", ExpectedValue::Int(1)),
+            ("two", ExpectedValue::Int(10), "-", ExpectedValue::Int(8)),
+            ("three", ExpectedValue::Int(15), "/", ExpectedValue::Int(5)),
+        ];
+
+        for (key, left, op, right) in expected_tests {
+            match hash_literal.pairs.get(key) {
+                Some(expr) => test_infix_expression(expr, left, op, right),
+                None => panic!("No key found for: {}", key),
+            }
+        }
+    }
+
+    #[test]
+    fn test_parsing_index_expressions() {
+        let input = "myArray[1 + 1]";
+        let lexer = Lexer::new(input.to_string());
+        let mut parser = Parser::new(lexer);
+        let program = parser.parse_program();
+
+        check_parser_errors(&parser);
+
+        assert_eq!(
+            program.statements.len(),
+            1,
+            "program doesn't contain 1 statement. Got: {}",
+            program.statements.len()
+        );
+
+        let stmt = &program.statements[0];
+        if !stmt.as_any().is::<ExpressionStatement>() {
+            panic!("stmt is not an expression statement");
+        }
+        let expr_stmt = stmt.as_any().downcast_ref::<ExpressionStatement>().unwrap();
+
+        if !expr_stmt.expression.as_any().is::<IndexExpression>() {
+            panic!("expression statements expression is not an index expression");
+        }
+        let index_expression = expr_stmt
+            .expression
+            .as_any()
+            .downcast_ref::<IndexExpression>()
+            .unwrap();
+
+        test_identifier(&index_expression.left, String::from("myArray"));
+        test_infix_expression(
+            &index_expression.index,
+            ExpectedValue::Int(1),
+            "+",
+            ExpectedValue::Int(1),
+        );
+    }
+
+    #[test]
+    fn test_function_literal_with_name() {
+        let input = "let myFunction = func() { };";
+        let lexer = Lexer::new(input.to_string());
+        let mut parser = Parser::new(lexer);
+        let program = parser.parse_program();
+
+        check_parser_errors(&parser);
+
+        assert_eq!(
+            program.statements.len(),
+            1,
+            "program doesn't contain 1 statement. Got: {}",
+            program.statements.len()
+        );
+
+        let stmt = &program.statements[0];
+        if !stmt.as_any().is::<LetStatement>() {
+            panic!("program.Statements[0] is not a LetStatement");
+        }
+        let let_stmt = stmt.as_any().downcast_ref::<LetStatement>().unwrap();
+
+        if !let_stmt.value.as_any().is::<FunctionLiteral>() {
+            panic!("expression statements expression is not a function literal");
+        }
+        let function_literal = let_stmt
+            .value
+            .as_any()
+            .downcast_ref::<FunctionLiteral>()
+            .unwrap();
+
+        if function_literal.name.take() != String::from("myFunction") {
+            panic!(
+                "function literal name wrong. Expected 'myFunction'. Got: '{}'",
+                function_literal.name.take(),
+            );
         }
     }
 }
