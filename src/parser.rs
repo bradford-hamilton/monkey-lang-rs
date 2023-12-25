@@ -829,8 +829,6 @@ fn is_zero_value_statement(stmt: &Box<dyn Statement>) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use std::borrow::Borrow;
-
     use super::*;
 
     enum ExpectedValue {
@@ -961,7 +959,6 @@ mod tests {
             ExpectedValue::Bool(left_data) => {
                 test_literal_expression(&infix.left, ExpectedValue::Bool(left_data))
             }
-            _ => panic!("Left value type not implemented"),
         }
 
         if infix.operator != operator {
@@ -981,7 +978,6 @@ mod tests {
             ExpectedValue::Bool(right_data) => {
                 test_literal_expression(&infix.right, ExpectedValue::Bool(right_data));
             }
-            _ => panic!("Right value type not implemented"),
         }
     }
 
@@ -2119,7 +2115,7 @@ mod tests {
             .downcast_ref::<FunctionLiteral>()
             .unwrap();
 
-        if function_literal.name.take() != String::from("myFunction") {
+        if function_literal.name.take() != *"myFunction" {
             panic!(
                 "function literal name wrong. Expected 'myFunction'. Got: '{}'",
                 function_literal.name.take(),
