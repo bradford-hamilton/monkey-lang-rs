@@ -940,10 +940,29 @@ mod tests {
         }
     }
 
-    fn test_infix_expression(expr: &Box<dyn Expression>, left: &str, operator: &str, right: &str) {
+    fn test_infix_expression(
+        expr: &Box<dyn Expression>,
+        left: ExpectedValue,
+        operator: &str,
+        right: ExpectedValue,
+    ) {
+        if !expr.as_any().is::<InfixExpression>() {
+            panic!("expression is not an infix expression");
+        }
         let infix = expr.as_any().downcast_ref::<InfixExpression>().unwrap();
-        let ev_left = ExpectedValue::Ident(left.to_string());
-        test_literal_expression(&infix.left, ev_left);
+
+        match left {
+            ExpectedValue::Ident(left_data) => {
+                test_literal_expression(&infix.left, ExpectedValue::Ident(left_data))
+            }
+            ExpectedValue::Int(left_data) => {
+                test_literal_expression(&infix.left, ExpectedValue::Int(left_data))
+            }
+            ExpectedValue::Bool(left_data) => {
+                test_literal_expression(&infix.left, ExpectedValue::Bool(left_data))
+            }
+            _ => panic!("Left value type not implemented"),
+        }
 
         if infix.operator != operator {
             panic!(
@@ -952,8 +971,18 @@ mod tests {
             );
         }
 
-        let ev_right = ExpectedValue::Ident(right.to_string());
-        test_literal_expression(&infix.right, ev_right);
+        match right {
+            ExpectedValue::Ident(right_data) => {
+                test_literal_expression(&infix.right, ExpectedValue::Ident(right_data));
+            }
+            ExpectedValue::Int(right_data) => {
+                test_literal_expression(&infix.right, ExpectedValue::Int(right_data));
+            }
+            ExpectedValue::Bool(right_data) => {
+                test_literal_expression(&infix.right, ExpectedValue::Bool(right_data));
+            }
+            _ => panic!("Right value type not implemented"),
+        }
     }
 
     #[test]
@@ -1443,7 +1472,12 @@ mod tests {
             .downcast_ref::<IfExpression>()
             .unwrap();
 
-        test_infix_expression(&if_expr.condition, "x", "<", "y");
+        test_infix_expression(
+            &if_expr.condition,
+            ExpectedValue::Ident(String::from("x")),
+            "<",
+            ExpectedValue::Ident(String::from("y")),
+        );
 
         assert_eq!(
             if_expr.consequence.statements.len(),
@@ -1502,7 +1536,19 @@ mod tests {
             .downcast_ref::<IfExpression>()
             .unwrap();
 
-        test_infix_expression(&if_expr.condition, "x", "<", "y");
+        test_infix_expression(
+            &if_expr.condition,
+            ExpectedValue::Ident(String::from("x")),
+            "<",
+            ExpectedValue::Ident(String::from("y")),
+        );
+
+        test_infix_expression(
+            &if_expr.condition,
+            ExpectedValue::Ident(String::from("x")),
+            "<",
+            ExpectedValue::Ident(String::from("y")),
+        );
 
         assert_eq!(
             if_expr.consequence.statements.len(),
@@ -1593,6 +1639,118 @@ mod tests {
             .downcast_ref::<ExpressionStatement>()
             .unwrap();
 
-        test_infix_expression(&body.expression, "x", "+", "y");
+        test_infix_expression(
+            &body.expression,
+            ExpectedValue::Ident(String::from("x")),
+            "+",
+            ExpectedValue::Ident(String::from("y")),
+        );
+    }
+
+    #[test]
+    fn test_function_parameter_parsing() {
+        let tests = vec![
+            ("func() {};", vec![] as Vec<&str>),
+            ("func(x) {};", vec!["x"]),
+            ("func(x, y, z) {};", vec!["x", "y", "z"]),
+        ];
+
+        for (input, expected_params) in tests {
+            let lexer = Lexer::new(input.to_string());
+            let mut parser = Parser::new(lexer);
+            let program = parser.parse_program();
+
+            check_parser_errors(&parser);
+
+            assert_eq!(
+                program.statements.len(),
+                1,
+                "program doesn't contain 1 statement. Got: {}",
+                program.statements.len()
+            );
+
+            let stmt = &program.statements[0];
+            if !stmt.as_any().is::<ExpressionStatement>() {
+                panic!("statement is not an expression statement");
+            }
+            let expr_stmt = stmt.as_any().downcast_ref::<ExpressionStatement>().unwrap();
+
+            if !expr_stmt.expression.as_any().is::<FunctionLiteral>() {
+                panic!("statement is not a function literal");
+            }
+            let function = expr_stmt
+                .expression
+                .as_any()
+                .downcast_ref::<FunctionLiteral>()
+                .unwrap();
+
+            assert_eq!(
+                function.parameters.len(),
+                expected_params.len(),
+                "length of parameters wrong. Expected: {}. Got: {}",
+                expected_params.len(),
+                function.parameters.len()
+            );
+
+            for (i, &expected_param) in expected_params.iter().enumerate() {
+                let param = &function.parameters[i];
+                assert_eq!(param.value, expected_param);
+            }
+        }
+    }
+
+    #[test]
+    fn test_call_expression_parsing() {
+        let input = "add(1, 2 * 3, 4 + 5);";
+        let lexer = Lexer::new(input.to_string());
+        let mut parser = Parser::new(lexer);
+        let program = parser.parse_program();
+
+        check_parser_errors(&parser);
+
+        assert_eq!(
+            program.statements.len(),
+            1,
+            "program doesn't contain 1 statement. Got: {}",
+            program.statements.len()
+        );
+
+        let stmt = &program.statements[0];
+        if !stmt.as_any().is::<ExpressionStatement>() {
+            panic!("stmt is not an expression statement");
+        }
+        let expr_stmt = stmt.as_any().downcast_ref::<ExpressionStatement>().unwrap();
+
+        if !expr_stmt.expression.as_any().is::<CallExpression>() {
+            panic!("stmt.Expression is not a CallExpression");
+        }
+        let call_expr = expr_stmt
+            .expression
+            .as_any()
+            .downcast_ref::<CallExpression>()
+            .unwrap();
+
+        test_identifier(&call_expr.func, String::from("add"));
+
+        assert_eq!(
+            call_expr.arguments.len(),
+            3,
+            "Wrong length of arguments. Got: {}",
+            call_expr.arguments.len()
+        );
+
+        test_literal_expression(&call_expr.arguments[0], ExpectedValue::Int(1));
+        test_infix_expression(
+            &call_expr.arguments[1],
+            ExpectedValue::Int(2),
+            "*",
+            ExpectedValue::Int(3),
+        );
+        test_infix_expression(
+            &call_expr.arguments[2],
+            ExpectedValue::Int(4),
+            "+",
+            ExpectedValue::Int(5),
+        );
     }
 }
