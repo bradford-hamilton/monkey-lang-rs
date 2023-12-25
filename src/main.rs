@@ -1,7 +1,9 @@
 use std::fs;
 
 mod ast;
+mod compiler;
 mod lexer;
+mod object;
 mod parser;
 mod token;
 
