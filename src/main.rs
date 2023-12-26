@@ -1,7 +1,9 @@
 use std::fs;
 
 mod ast;
+mod bytecode;
 mod compiler;
+mod environment;
 mod lexer;
 mod object;
 mod parser;
