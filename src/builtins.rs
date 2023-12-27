@@ -33,15 +33,15 @@ impl Clone for Builtin {
 lazy_static! {
     static ref BUILTINS: HashMap<String, Builtin> = {
         let mut m = HashMap::new();
-        m.insert("len".to_string(), Builtin::new(b_len));
-        m.insert("print".to_string(), Builtin::new(b_print));
-        m.insert("first".to_string(), Builtin::new(b_first));
-        m.insert("last".to_string(), Builtin::new(b_last));
-        m.insert("rest".to_string(), Builtin::new(b_rest));
-        m.insert("push".to_string(), Builtin::new(b_push));
-        m.insert("pop".to_string(), Builtin::new(b_pop));
-        m.insert("split".to_string(), Builtin::new(b_split));
-        m.insert("join".to_string(), Builtin::new(b_join));
+        m.insert(String::from("len"), Builtin::new(b_len));
+        m.insert(String::from("print"), Builtin::new(b_print));
+        m.insert(String::from("first"), Builtin::new(b_first));
+        m.insert(String::from("last"), Builtin::new(b_last));
+        m.insert(String::from("rest"), Builtin::new(b_rest));
+        m.insert(String::from("push"), Builtin::new(b_push));
+        m.insert(String::from("pop"), Builtin::new(b_pop));
+        m.insert(String::from("split"), Builtin::new(b_split));
+        m.insert(String::from("join"), Builtin::new(b_join));
         m
     };
 }

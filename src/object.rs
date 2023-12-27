@@ -484,7 +484,7 @@ mod tests {
     fn test_closure() {
         let cl = Closure {
             func: CompiledFunc {
-                instructions: Instructions::new(),
+                instructions: Instructions::new(vec![]),
                 num_locals: 0,
                 num_params: 0,
             },
@@ -509,7 +509,7 @@ mod tests {
     #[test]
     fn test_compiled_function() {
         let cf = CompiledFunc {
-            instructions: Vec::from("OpDoesntMatter".as_bytes()),
+            instructions: Instructions::new(Vec::from("OpDoesntMatter".as_bytes())),
             num_locals: 1,
             num_params: 1,
         };
