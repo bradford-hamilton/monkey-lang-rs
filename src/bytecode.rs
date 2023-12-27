@@ -14,7 +14,7 @@ impl Instructions {
         let mut i = 0;
 
         while i < self.0.len() {
-            match lookup(self.0[i]) {
+            match lookup(Opcode::from(self.0[i])) {
                 Ok(def) => {
                     let (operands, read) = read_operands(&def, &self.0[i + 1..]);
                     output.push_str(&format!("{:04} {}\n", i, fmt_instruction(def, operands)));
@@ -22,7 +22,7 @@ impl Instructions {
                 }
                 Err(err) => {
                     output.push_str(&format!("ERROR: {}\n", err));
-                    i += 1; // Move to next instruction
+                    i += 1;
                 }
             }
         }
@@ -45,7 +45,7 @@ impl IndexMut<usize> for Instructions {
     }
 }
 
-fn fmt_instruction(definition: Definition, operands: Vec<u16>) -> String {
+fn fmt_instruction(definition: &Definition, operands: Vec<u16>) -> String {
     let operand_count = definition.operand_widths.len();
 
     if operands.len() != operand_count {
@@ -98,9 +98,8 @@ struct Definition {
     operand_widths: Vec<usize>,
 }
 
-type Op = u8;
-
-#[derive(Copy, Clone, Eq, PartialEq, Hash)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
+#[repr(u8)]
 pub enum Opcode {
     /// Constants
     OpConstant,
@@ -172,13 +171,16 @@ pub enum Opcode {
 }
 
 impl Opcode {
-    pub fn to_op(&self) -> Op {
-        *self as Op
+    pub fn to_u8(&self) -> u8 {
+        *self as u8
     }
 }
 
-fn lookup(opcode: u8) -> Result<Definition, String> {
-    todo!()
+fn lookup(op: Opcode) -> Result<&'static Definition, String> {
+    match DEFINITIONS.get(&op) {
+        Some(def) => Ok(def),
+        None => Err(format!("Opcode {:?} undefined", op)),
+    }
 }
 
 fn make(op: Opcode, operands: &[usize]) -> Vec<u8> {
@@ -470,4 +472,48 @@ lazy_static! {
 
         m
     };
+}
+
+impl From<u8> for Opcode {
+    fn from(byte: u8) -> Self {
+        match byte {
+            0 => Opcode::OpConstant,
+            1 => Opcode::OpAdd,
+            2 => Opcode::OpPop,
+            3 => Opcode::OpSub,
+            4 => Opcode::OpMul,
+            5 => Opcode::OpDiv,
+            6 => Opcode::OpMod,
+            7 => Opcode::OpTrue,
+            8 => Opcode::OpFalse,
+            9 => Opcode::OpEqualEqual,
+            10 => Opcode::OpNotEqual,
+            11 => Opcode::OpGreater,
+            12 => Opcode::OpGreaterEqual,
+            13 => Opcode::OpAnd,
+            14 => Opcode::OpOr,
+            15 => Opcode::OpMinus,
+            16 => Opcode::OpBang,
+            17 => Opcode::OpPlusPlus,
+            18 => Opcode::OpMinusMinus,
+            19 => Opcode::OpJumpNotTruthy,
+            20 => Opcode::OpJump,
+            21 => Opcode::OpNull,
+            22 => Opcode::OpGetGlobal,
+            23 => Opcode::OpSetGlobal,
+            24 => Opcode::OpArray,
+            25 => Opcode::OpHash,
+            26 => Opcode::OpIndex,
+            27 => Opcode::OpCall,
+            28 => Opcode::OpReturnValue,
+            29 => Opcode::OpReturn,
+            30 => Opcode::OpGetLocal,
+            31 => Opcode::OpSetLocal,
+            32 => Opcode::OpGetBuiltin,
+            33 => Opcode::OpClosure,
+            34 => Opcode::OpGetFree,
+            35 => Opcode::OpCurrentClosure,
+            _ => panic!("undefined opcode: {}", byte),
+        }
+    }
 }
