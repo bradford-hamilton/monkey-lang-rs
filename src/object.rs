@@ -1,18 +1,20 @@
+use crate::builtins::Builtin;
 use crate::environment::Environment;
 use crate::{
     ast::{BlockStatement, Expression, Identifier},
     bytecode,
 };
-use lazy_static::lazy_static;
+use std::any::Any;
 use std::collections::HashMap;
+use std::fmt::Display;
 use std::rc::Rc;
-use std::sync::Arc;
 
 /// Object represents monkey's object system. Every value in monkey-lang
 /// must implement this interface.
 pub trait Object {
     fn object_type(&self) -> ObjectType;
     fn inspect(&self) -> String;
+    fn as_any(&self) -> &dyn Any;
 }
 
 /// Represents the different available object types in monkey-lang.
@@ -31,7 +33,27 @@ pub enum ObjectType {
     Closure,
 }
 
-struct Integer {
+impl Display for ObjectType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let type_str = match self {
+            ObjectType::Integer => "INTEGER",
+            ObjectType::Boolean => "BOOLEAN",
+            ObjectType::Null => "NULL",
+            ObjectType::ReturnValue => "RETURN_VALUE",
+            ObjectType::Error => "ERROR",
+            ObjectType::Function => "FUNCTION",
+            ObjectType::String => "STRING",
+            ObjectType::Builtin => "BUILTIN",
+            ObjectType::Array => "ARRAY",
+            ObjectType::Hash => "HASH",
+            ObjectType::CompiledFunction => "COMPILED_FUNCTION",
+            ObjectType::Closure => "CLOSURE",
+        };
+        write!(f, "{}", type_str)
+    }
+}
+
+pub struct Integer {
     pub value: i64,
 }
 
@@ -42,9 +64,12 @@ impl Object for Integer {
     fn inspect(&self) -> String {
         self.value.to_string()
     }
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
-struct Null {}
+pub struct Null {}
 
 impl Object for Null {
     fn object_type(&self) -> ObjectType {
@@ -53,10 +78,13 @@ impl Object for Null {
     fn inspect(&self) -> String {
         String::from("null")
     }
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
-struct Array {
-    pub elements: Vec<Box<dyn Object>>,
+pub struct Array {
+    pub elements: Vec<Rc<dyn Object>>,
 }
 
 impl Object for Array {
@@ -67,9 +95,12 @@ impl Object for Array {
         let elements_str: Vec<String> = self.elements.iter().map(|e| e.inspect()).collect();
         format!("[{}]", elements_str.join(", "))
     }
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
-struct Boolean {
+pub struct Boolean {
     pub value: bool,
 }
 
@@ -80,6 +111,9 @@ impl Object for Boolean {
     fn inspect(&self) -> String {
         self.value.to_string()
     }
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 /// CompiledFunction holds the instructions we get from the compilation of a function
@@ -88,7 +122,7 @@ impl Object for Boolean {
 /// to the VM to allocate the correct amount of stack space ("hole") to save the local
 /// bindings
 // TODO: check back in on this comment after implementing.
-struct CompiledFunction {
+pub struct CompiledFunction {
     pub instructions: bytecode::Instructions,
     pub num_locals: usize,
     pub num_params: usize,
@@ -101,9 +135,12 @@ impl Object for CompiledFunction {
     fn inspect(&self) -> String {
         format!("CompiledFunction[{:p}]", self)
     }
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
-struct Closure {
+pub struct Closure {
     pub func: CompiledFunction,
     pub free: Vec<Box<dyn Object>>,
 }
@@ -115,9 +152,12 @@ impl Object for Closure {
     fn inspect(&self) -> String {
         format!("Closure[{:p}]", self)
     }
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
-struct Error {
+pub struct Error {
     pub message: String,
 }
 
@@ -128,9 +168,12 @@ impl Object for Error {
     fn inspect(&self) -> String {
         self.message.clone()
     }
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
-struct Function {
+pub struct Function {
     pub params: Vec<Identifier>,
     pub body: BlockStatement,
     pub env: Environment,
@@ -144,9 +187,12 @@ impl Object for Function {
         let params: Vec<String> = self.params.iter().map(|p| p.string()).collect();
         format!("func({}) {{\n{}\n}}", params.join(", "), self.body.string())
     }
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
-struct Str {
+pub struct Str {
     pub value: String,
 }
 
@@ -157,9 +203,12 @@ impl Object for Str {
     fn inspect(&self) -> String {
         self.value.clone()
     }
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
-struct Hash {
+pub struct Hash {
     pairs: HashMap<HashKey, HashPair>,
 }
 
@@ -171,9 +220,12 @@ impl Object for Hash {
         let pairs: Vec<String> = self.pairs.values().map(|pair| pair.inspect()).collect();
         format!("{{ {} }}", pairs.join(", "))
     }
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
-struct HashPair {
+pub struct HashPair {
     key: Box<dyn Object>,
     value: Box<dyn Object>,
 }
@@ -184,7 +236,7 @@ impl HashPair {
     }
 }
 
-struct HashKey {
+pub struct HashKey {
     object_type: ObjectType,
     value: u64,
 }
@@ -229,8 +281,8 @@ impl Hashable for Str {
     }
 }
 
-struct ReturnValue {
-    pub value: dyn Object,
+pub struct ReturnValue {
+    pub value: Box<dyn Object>,
 }
 
 impl Object for ReturnValue {
@@ -240,31 +292,8 @@ impl Object for ReturnValue {
     fn inspect(&self) -> String {
         self.value.inspect()
     }
-}
-
-struct Builtin {
-    func: Arc<dyn Fn(Vec<Rc<dyn Object>>) -> Rc<dyn Object> + Send + Sync>,
-}
-
-impl Builtin {
-    fn new<F>(func: F) -> Self
-    where
-        F: Fn(Vec<Rc<dyn Object>>) -> Rc<dyn Object> + 'static + Send + Sync,
-    {
-        Builtin {
-            func: Arc::new(func),
-        }
-    }
-    fn call(&self, args: Vec<Rc<dyn Object>>) -> Rc<dyn Object> {
-        (self.func)(args)
-    }
-}
-
-impl Clone for Builtin {
-    fn clone(&self) -> Self {
-        Builtin {
-            func: Arc::clone(&self.func),
-        }
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 
@@ -275,64 +304,7 @@ impl Object for Builtin {
     fn inspect(&self) -> String {
         String::from("builtin function")
     }
-}
-
-lazy_static! {
-    static ref BUILTINS: HashMap<String, Builtin> = {
-        let mut m = HashMap::new();
-        m.insert("len".to_string(), Builtin::new(b_len));
-        m.insert("print".to_string(), Builtin::new(b_print));
-        m.insert("first".to_string(), Builtin::new(b_first));
-        m.insert("last".to_string(), Builtin::new(b_last));
-        m.insert("rest".to_string(), Builtin::new(b_rest));
-        m.insert("push".to_string(), Builtin::new(b_push));
-        m.insert("pop".to_string(), Builtin::new(b_pop));
-        m.insert("split".to_string(), Builtin::new(b_split));
-        m.insert("join".to_string(), Builtin::new(b_join));
-        m
-    };
-}
-
-fn get_builtin_by_name(name: &str) -> Option<Builtin> {
-    BUILTINS.get(name).cloned()
-}
-
-fn b_len(args: Vec<Rc<dyn Object>>) -> Rc<dyn Object> {
-    todo!();
-}
-
-fn b_print(args: Vec<Rc<dyn Object>>) -> Rc<dyn Object> {
-    todo!();
-}
-
-fn b_first(args: Vec<Rc<dyn Object>>) -> Rc<dyn Object> {
-    todo!();
-}
-
-fn b_last(args: Vec<Rc<dyn Object>>) -> Rc<dyn Object> {
-    todo!();
-}
-
-fn b_rest(args: Vec<Rc<dyn Object>>) -> Rc<dyn Object> {
-    todo!();
-}
-
-fn b_push(args: Vec<Rc<dyn Object>>) -> Rc<dyn Object> {
-    todo!();
-}
-
-fn b_pop(args: Vec<Rc<dyn Object>>) -> Rc<dyn Object> {
-    todo!();
-}
-
-fn b_split(args: Vec<Rc<dyn Object>>) -> Rc<dyn Object> {
-    todo!();
-}
-
-fn b_join(args: Vec<Rc<dyn Object>>) -> Rc<dyn Object> {
-    todo!();
-}
-
-fn new_error(message: String) -> Error {
-    Error { message }
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }

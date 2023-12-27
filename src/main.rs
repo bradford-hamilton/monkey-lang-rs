@@ -1,6 +1,7 @@
 use std::fs;
 
 mod ast;
+mod builtins;
 mod bytecode;
 mod compiler;
 mod environment;
