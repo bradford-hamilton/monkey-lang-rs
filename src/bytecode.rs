@@ -1,3 +1,5 @@
+use lazy_static::lazy_static;
+use std::collections::HashMap;
 use std::ops::{Index, IndexMut};
 
 pub struct Instructions(Vec<u8>);
@@ -93,13 +95,13 @@ fn read_uint8(ins: &[u8]) -> u8 {
 
 struct Definition {
     name: String,
-    operand_widths: Vec<i64>,
+    operand_widths: Vec<usize>,
 }
 
-type Opcode = u8;
+type Op = u8;
 
-#[derive(Copy, Clone)]
-pub enum Opcodes {
+#[derive(Copy, Clone, Eq, PartialEq, Hash)]
+pub enum Opcode {
     /// Constants
     OpConstant,
 
@@ -169,12 +171,303 @@ pub enum Opcodes {
     OpCurrentClosure,
 }
 
-impl Opcodes {
-    pub fn to_opcode(&self) -> Opcode {
-        *self as Opcode
+impl Opcode {
+    pub fn to_op(&self) -> Op {
+        *self as Op
     }
 }
 
 fn lookup(opcode: u8) -> Result<Definition, String> {
     todo!()
+}
+
+fn make(op: Opcode, operands: &[usize]) -> Vec<u8> {
+    let def = match DEFINITIONS.get(&op) {
+        Some(def) => def,
+        None => return Vec::new(),
+    };
+
+    let mut instruction_len = 1;
+    for &w in &def.operand_widths {
+        instruction_len += w;
+    }
+
+    let mut instruction = vec![0; instruction_len];
+    instruction[0] = op as u8;
+
+    let mut offset = 1;
+    for (&o, &width) in operands.iter().zip(def.operand_widths.iter()) {
+        match width {
+            2 => {
+                let bytes = (o as u16).to_be_bytes();
+                instruction[offset..offset + 2].copy_from_slice(&bytes);
+            }
+            1 => instruction[offset] = o.try_into().expect("Operand too large for u8"),
+            _ => unimplemented!("Unsupported operand width"),
+        }
+        offset += width;
+    }
+
+    instruction
+}
+
+lazy_static! {
+    static ref DEFINITIONS: HashMap<Opcode, Definition> = {
+        let mut m = HashMap::new();
+
+        m.insert(
+            Opcode::OpConstant,
+            Definition {
+                name: String::from("OpConstant"),
+                operand_widths: vec![2],
+            },
+        );
+        m.insert(
+            Opcode::OpAdd,
+            Definition {
+                name: String::from("OpAdd"),
+                operand_widths: vec![],
+            },
+        );
+        m.insert(
+            Opcode::OpPop,
+            Definition {
+                name: String::from("OpPop"),
+                operand_widths: vec![],
+            },
+        );
+        m.insert(
+            Opcode::OpSub,
+            Definition {
+                name: String::from("OpSub"),
+                operand_widths: vec![],
+            },
+        );
+        m.insert(
+            Opcode::OpMul,
+            Definition {
+                name: String::from("OpMul"),
+                operand_widths: vec![],
+            },
+        );
+        m.insert(
+            Opcode::OpDiv,
+            Definition {
+                name: String::from("OpDiv"),
+                operand_widths: vec![],
+            },
+        );
+        m.insert(
+            Opcode::OpMod,
+            Definition {
+                name: String::from("OpMod"),
+                operand_widths: vec![],
+            },
+        );
+        m.insert(
+            Opcode::OpTrue,
+            Definition {
+                name: String::from("OpTrue"),
+                operand_widths: vec![],
+            },
+        );
+        m.insert(
+            Opcode::OpFalse,
+            Definition {
+                name: String::from("OpFalse"),
+                operand_widths: vec![],
+            },
+        );
+        m.insert(
+            Opcode::OpEqualEqual,
+            Definition {
+                name: String::from("OpEqualEqual"),
+                operand_widths: vec![],
+            },
+        );
+        m.insert(
+            Opcode::OpNotEqual,
+            Definition {
+                name: String::from("OpNotEqual"),
+                operand_widths: vec![],
+            },
+        );
+        m.insert(
+            Opcode::OpGreater,
+            Definition {
+                name: String::from("OpGreater"),
+                operand_widths: vec![],
+            },
+        );
+        m.insert(
+            Opcode::OpGreaterEqual,
+            Definition {
+                name: String::from("OpGreaterEqual"),
+                operand_widths: vec![],
+            },
+        );
+        m.insert(
+            Opcode::OpAnd,
+            Definition {
+                name: String::from("OpAnd"),
+                operand_widths: vec![],
+            },
+        );
+        m.insert(
+            Opcode::OpOr,
+            Definition {
+                name: String::from("OpOr"),
+                operand_widths: vec![],
+            },
+        );
+        m.insert(
+            Opcode::OpMinus,
+            Definition {
+                name: String::from("OpMinus"),
+                operand_widths: vec![],
+            },
+        );
+        m.insert(
+            Opcode::OpBang,
+            Definition {
+                name: String::from("OpBang"),
+                operand_widths: vec![],
+            },
+        );
+        m.insert(
+            Opcode::OpPlusPlus,
+            Definition {
+                name: String::from("OpPlusPlus"),
+                operand_widths: vec![],
+            },
+        );
+        m.insert(
+            Opcode::OpMinusMinus,
+            Definition {
+                name: String::from("OpMinusMinus"),
+                operand_widths: vec![],
+            },
+        );
+        m.insert(
+            Opcode::OpJumpNotTruthy,
+            Definition {
+                name: String::from("OpJumpNotTruthy"),
+                operand_widths: vec![2],
+            },
+        );
+        m.insert(
+            Opcode::OpJump,
+            Definition {
+                name: String::from("OpJump"),
+                operand_widths: vec![2],
+            },
+        );
+        m.insert(
+            Opcode::OpNull,
+            Definition {
+                name: String::from("OpNull"),
+                operand_widths: vec![],
+            },
+        );
+        m.insert(
+            Opcode::OpGetGlobal,
+            Definition {
+                name: String::from("OpGetGlobal"),
+                operand_widths: vec![2],
+            },
+        );
+        m.insert(
+            Opcode::OpSetGlobal,
+            Definition {
+                name: String::from("OpSetGlobal"),
+                operand_widths: vec![2],
+            },
+        );
+        m.insert(
+            Opcode::OpArray,
+            Definition {
+                name: String::from("OpArray"),
+                operand_widths: vec![2],
+            },
+        );
+        m.insert(
+            Opcode::OpHash,
+            Definition {
+                name: String::from("OpHash"),
+                operand_widths: vec![2],
+            },
+        );
+        m.insert(
+            Opcode::OpIndex,
+            Definition {
+                name: String::from("OpIndex"),
+                operand_widths: vec![],
+            },
+        );
+        m.insert(
+            Opcode::OpCall,
+            Definition {
+                name: String::from("OpCall"),
+                operand_widths: vec![1],
+            },
+        );
+        m.insert(
+            Opcode::OpReturnValue,
+            Definition {
+                name: String::from("OpReturnValue"),
+                operand_widths: vec![],
+            },
+        );
+        m.insert(
+            Opcode::OpReturn,
+            Definition {
+                name: String::from("OpReturn"),
+                operand_widths: vec![],
+            },
+        );
+        m.insert(
+            Opcode::OpGetLocal,
+            Definition {
+                name: String::from("OpGetLocal"),
+                operand_widths: vec![1],
+            },
+        );
+        m.insert(
+            Opcode::OpSetLocal,
+            Definition {
+                name: String::from("OpSetLocal"),
+                operand_widths: vec![1],
+            },
+        );
+        m.insert(
+            Opcode::OpGetBuiltin,
+            Definition {
+                name: String::from("OpGetBuiltin"),
+                operand_widths: vec![1],
+            },
+        );
+        m.insert(
+            Opcode::OpClosure,
+            Definition {
+                name: String::from("OpClosure"),
+                operand_widths: vec![2, 1],
+            },
+        );
+        m.insert(
+            Opcode::OpGetFree,
+            Definition {
+                name: String::from("OpGetFree"),
+                operand_widths: vec![1],
+            },
+        );
+        m.insert(
+            Opcode::OpCurrentClosure,
+            Definition {
+                name: String::from("OpCurrentClosure"),
+                operand_widths: vec![],
+            },
+        );
+
+        m
+    };
 }
