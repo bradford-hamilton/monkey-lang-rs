@@ -34,6 +34,10 @@ impl Instructions {
     pub fn len(&self) -> i64 {
         self.0.len() as i64
     }
+
+    pub fn as_vec_u8(&self) -> Vec<u8> {
+        self.0.to_vec()
+    }
 }
 
 impl Index<usize> for Instructions {
@@ -194,7 +198,7 @@ fn lookup(op: Opcode) -> Result<&'static Definition, String> {
     }
 }
 
-pub fn make(op: Opcode, operands: Vec<i32>) -> Vec<u8> {
+pub fn make_instruction(op: Opcode, operands: Vec<i32>) -> Vec<u8> {
     let def = match DEFINITIONS.get(&op) {
         Some(def) => def,
         None => return Vec::new(),

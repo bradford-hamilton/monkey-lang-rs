@@ -1,8 +1,8 @@
 use crate::ast::{
     ArrayLiteral, BlockStatement, Boolean, CallExpression, ConstStatement, Expression,
     ExpressionStatement, FunctionLiteral, HashLiteral, Identifier, IfExpression, IndexExpression,
-    InfixExpression, IntegerLiteral, LetStatement, PrefixExpression, ReturnStatement, RootNode,
-    Statement, StringLiteral, ZeroValueExpression, ZeroValueStatement,
+    InfixExpression, IntegerLiteral, LetStatement, Node, PrefixExpression, ReturnStatement,
+    RootNode, Statement, StringLiteral, ZeroValueExpression, ZeroValueStatement,
 };
 use crate::lexer::Lexer;
 use crate::token::{Token, TokenType};

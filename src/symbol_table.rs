@@ -30,16 +30,17 @@ impl SymbolScope {
 
 #[derive(Clone)]
 pub struct Symbol {
-    name: String,
-    scope: SymbolScope,
-    index: i64,
+    pub name: String,
+    pub scope: SymbolScope,
+    pub index: i64,
 }
 
+#[derive(Clone)]
 pub struct SymbolTable {
     store: HashMap<String, Symbol>,
-    num_definitions: usize,
+    pub num_definitions: usize,
     outer: Option<Box<SymbolTable>>,
-    free_symbols: Vec<Symbol>,
+    pub free_symbols: Vec<Symbol>,
 }
 
 impl SymbolTable {
@@ -63,7 +64,7 @@ impl SymbolTable {
 
     /// define takes a name and creates a symbol, an index, and assigns scope. It then assigns
     /// the symbol to the SymbolTable's store, increases num_definitions and returns the symbol.
-    fn define(&mut self, name: String) -> Symbol {
+    pub fn define(&mut self, name: String) -> Symbol {
         let scope = if self.outer.is_none() {
             SymbolScope::Global
         } else {
@@ -108,7 +109,7 @@ impl SymbolTable {
     }
 
     /// defines a symbol with function scope.
-    fn define_function(&mut self, name: String) -> Symbol {
+    pub fn define_function(&mut self, name: String) -> Symbol {
         let sym = Symbol {
             name: name.clone(),
             scope: SymbolScope::Function,
@@ -137,5 +138,9 @@ impl SymbolTable {
                 None => None,
             },
         }
+    }
+
+    pub fn get_outer(&mut self) -> Option<Box<SymbolTable>> {
+        self.outer.clone()
     }
 }

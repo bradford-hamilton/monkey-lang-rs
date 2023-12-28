@@ -1,7 +1,7 @@
 use crate::builtins::Builtin;
 use crate::environment::Environment;
 use crate::{
-    ast::{BlockStatement, Expression, Identifier},
+    ast::{BlockStatement, Identifier, Node},
     bytecode,
 };
 use std::any::Any;
