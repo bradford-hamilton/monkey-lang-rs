@@ -8,6 +8,7 @@ mod environment;
 mod lexer;
 mod object;
 mod parser;
+mod symbol_table;
 mod token;
 
 fn main() {
