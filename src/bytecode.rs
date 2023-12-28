@@ -2,6 +2,7 @@ use lazy_static::lazy_static;
 use std::collections::HashMap;
 use std::ops::{Index, IndexMut};
 
+#[derive(Clone)]
 pub struct Instructions(Vec<u8>);
 
 impl Instructions {
@@ -29,6 +30,10 @@ impl Instructions {
 
         output
     }
+
+    pub fn len(&self) -> i64 {
+        self.0.len() as i64
+    }
 }
 
 impl Index<usize> for Instructions {
@@ -42,6 +47,12 @@ impl Index<usize> for Instructions {
 impl IndexMut<usize> for Instructions {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
         &mut self.0[index]
+    }
+}
+
+impl Extend<u8> for Instructions {
+    fn extend<T: IntoIterator<Item = u8>>(&mut self, iter: T) {
+        self.0.extend(iter);
     }
 }
 
@@ -183,7 +194,7 @@ fn lookup(op: Opcode) -> Result<&'static Definition, String> {
     }
 }
 
-fn make(op: Opcode, operands: &[usize]) -> Vec<u8> {
+pub fn make(op: Opcode, operands: Vec<i32>) -> Vec<u8> {
     let def = match DEFINITIONS.get(&op) {
         Some(def) => def,
         None => return Vec::new(),

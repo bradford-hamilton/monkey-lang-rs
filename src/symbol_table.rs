@@ -29,13 +29,13 @@ impl SymbolScope {
 }
 
 #[derive(Clone)]
-struct Symbol {
+pub struct Symbol {
     name: String,
     scope: SymbolScope,
     index: i64,
 }
 
-struct SymbolTable {
+pub struct SymbolTable {
     store: HashMap<String, Symbol>,
     num_definitions: usize,
     outer: Option<Box<SymbolTable>>,
@@ -82,7 +82,7 @@ impl SymbolTable {
     }
 
     /// define_builtin creates and returns a symbol within builtin scope.
-    fn define_builtin(&mut self, index: i64, name: String) -> Symbol {
+    pub fn define_builtin(&mut self, index: i64, name: String) -> Symbol {
         let sym = Symbol {
             name: name.clone(),
             index,

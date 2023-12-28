@@ -31,7 +31,7 @@ impl Clone for Builtin {
 }
 
 lazy_static! {
-    static ref BUILTINS: HashMap<String, Builtin> = {
+    pub static ref BUILTINS: HashMap<String, Builtin> = {
         let mut m = HashMap::new();
         m.insert(String::from("len"), Builtin::new(b_len));
         m.insert(String::from("print"), Builtin::new(b_print));
