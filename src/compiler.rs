@@ -1,7 +1,8 @@
 use crate::ast::{
-    ArrayLiteral, BlockStatement, Boolean, ConstStatement, Expression, ExpressionStatement,
-    FunctionLiteral, HashLiteral, Identifier, IfExpression, IndexExpression, InfixExpression,
-    IntegerLiteral, LetStatement, Node, PrefixExpression, RootNode, StringLiteral,
+    ArrayLiteral, BlockStatement, Boolean, CallExpression, ConstStatement, Expression,
+    ExpressionStatement, FunctionLiteral, HashLiteral, Identifier, IfExpression, IndexExpression,
+    InfixExpression, IntegerLiteral, LetStatement, Node, PrefixExpression, ReturnStatement,
+    RootNode, StringLiteral,
 };
 use crate::builtins::BUILTINS;
 use crate::bytecode::make_instruction;
@@ -432,6 +433,17 @@ impl Compiler {
                 Opcode::OpClosure,
                 vec![func_index as i32, free_symbols_len as i32],
             );
+        } else if let Some(return_stmt) = node.as_any().downcast_ref::<ReturnStatement>() {
+            self.compile(return_stmt.return_value.as_node())?;
+            self.emit(Opcode::OpReturnValue, vec![]);
+        } else if let Some(call_expr) = node.as_any().downcast_ref::<CallExpression>() {
+            self.compile(call_expr.func.as_node())?;
+
+            for arg in &call_expr.arguments {
+                self.compile(arg.as_node())?;
+            }
+
+            self.emit(Opcode::OpCall, vec![call_expr.arguments.len() as i32]);
         } else {
             return Err(String::from("unknown node type"));
         }
