@@ -1,9 +1,9 @@
 use ast::RootNode;
 use compiler::Compiler;
 use lexer::Lexer;
-use object::Object;
 use parser::Parser;
 use std::fs;
+use vm::VirtualMachine;
 
 mod ast;
 mod builtins;
@@ -15,6 +15,7 @@ mod object;
 mod parser;
 mod symbol_table;
 mod token;
+mod vm;
 
 fn main() {
     let filename = "test_input.mo";
@@ -27,8 +28,6 @@ fn main() {
     let program = parser.parse_program();
 
     compile_bytecode_and_run(program);
-
-    println!("heyo from the end");
 }
 
 fn compile_bytecode_and_run(root_node: RootNode) /* -> dyn Object */
@@ -47,5 +46,7 @@ fn compile_bytecode_and_run(root_node: RootNode) /* -> dyn Object */
 
     let code = compiler.bytecode();
 
-    println!("code: {:?}", code.instructions.as_vec_u8())
+    println!("code: {:?}", code.instructions.as_vec_u8());
+
+    let _vm = VirtualMachine::new(code);
 }
