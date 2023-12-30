@@ -102,7 +102,6 @@ impl SymbolTable {
             scope: SymbolScope::Free,
             index: (self.free_symbols.len() - 1) as i64,
         };
-
         self.store.insert(original.clone().name, sym.clone());
 
         sym

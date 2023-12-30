@@ -213,14 +213,15 @@ pub fn make_instruction(op: Opcode, operands: Vec<i32>) -> Vec<u8> {
     instruction[0] = op as u8;
 
     let mut offset = 1;
+
     for (&o, &width) in operands.iter().zip(def.operand_widths.iter()) {
         match width {
             2 => {
                 let bytes = (o as u16).to_be_bytes();
                 instruction[offset..offset + 2].copy_from_slice(&bytes);
             }
-            1 => instruction[offset] = o.try_into().expect("Operand too large for u8"),
-            _ => unimplemented!("Unsupported operand width"),
+            1 => instruction[offset] = o.try_into().expect("operand too large for u8"),
+            _ => unimplemented!("unsupported operand width"),
         }
         offset += width;
     }

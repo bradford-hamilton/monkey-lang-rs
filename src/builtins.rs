@@ -31,23 +31,26 @@ impl Clone for Builtin {
 }
 
 lazy_static! {
-    pub static ref BUILTINS: HashMap<String, Builtin> = {
-        let mut m = HashMap::new();
-        m.insert(String::from("len"), Builtin::new(b_len));
-        m.insert(String::from("print"), Builtin::new(b_print));
-        m.insert(String::from("first"), Builtin::new(b_first));
-        m.insert(String::from("last"), Builtin::new(b_last));
-        m.insert(String::from("rest"), Builtin::new(b_rest));
-        m.insert(String::from("push"), Builtin::new(b_push));
-        m.insert(String::from("pop"), Builtin::new(b_pop));
-        m.insert(String::from("split"), Builtin::new(b_split));
-        m.insert(String::from("join"), Builtin::new(b_join));
-        m
+    pub static ref BUILTINS: Vec<(String, Builtin)> = {
+        vec![
+            (String::from("len"), Builtin::new(b_len)),
+            (String::from("print"), Builtin::new(b_print)),
+            (String::from("first"), Builtin::new(b_first)),
+            (String::from("last"), Builtin::new(b_last)),
+            (String::from("rest"), Builtin::new(b_rest)),
+            (String::from("push"), Builtin::new(b_push)),
+            (String::from("pop"), Builtin::new(b_pop)),
+            (String::from("split"), Builtin::new(b_split)),
+            (String::from("join"), Builtin::new(b_join)),
+        ]
     };
 }
 
 pub fn get_builtin_by_name(name: &str) -> Option<Builtin> {
-    BUILTINS.get(name).cloned()
+    BUILTINS
+        .iter()
+        .find(|(builtin_name, _)| builtin_name == name)
+        .map(|(_, builtin)| builtin.clone())
 }
 
 fn b_len(args: Vec<Rc<dyn Object>>) -> Rc<dyn Object> {
@@ -163,8 +166,12 @@ fn b_push(args: Vec<Rc<dyn Object>>) -> Rc<dyn Object> {
 
     match args[0].as_ref().as_any().downcast_ref::<Array>() {
         Some(array) => {
-            let mut new_elements = array.elements.clone();
+            let length = array.elements.len();
+            let mut new_elements = Vec::with_capacity(length + 1);
+
+            new_elements.extend_from_slice(&array.elements);
             new_elements.push(Rc::clone(&args[1]));
+
             Rc::new(Array {
                 elements: new_elements,
             })
