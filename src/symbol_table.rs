@@ -7,7 +7,7 @@
 use std::collections::HashMap;
 
 /// All available scopes
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum SymbolScope {
     Global,
     Local,
@@ -28,18 +28,18 @@ impl SymbolScope {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Symbol {
     pub name: String,
     pub scope: SymbolScope,
     pub index: i64,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct SymbolTable {
     store: HashMap<String, Symbol>,
     pub num_definitions: usize,
-    outer: Option<Box<SymbolTable>>,
+    pub outer: Option<Box<SymbolTable>>,
     pub free_symbols: Vec<Symbol>,
 }
 

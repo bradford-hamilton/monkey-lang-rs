@@ -1469,4 +1469,70 @@ mod tests {
 
         run_compiler_tests(tests);
     }
+
+    #[test]
+    fn test_compiler_scopes() {
+        let mut compiler = Compiler::new();
+        assert_eq!(compiler.scope_index, 0, "initial scope_index should be 0");
+
+        let global_symbol_table = compiler.symbol_table.clone();
+
+        compiler.emit(Opcode::OpMul, vec![]);
+        compiler.enter_scope();
+        assert_eq!(
+            compiler.scope_index, 1,
+            "scope_index should be 1 after entering scope"
+        );
+
+        compiler.emit(Opcode::OpSub, vec![]);
+        assert_eq!(
+            compiler.current_instructions().len(),
+            1,
+            "instructions length should be 1 in the new scope"
+        );
+
+        let last = compiler.scopes[compiler.scope_index as usize].last_instruction;
+        assert_eq!(
+            last.opcode,
+            Opcode::OpSub,
+            "last_instruction Opcode should be OpSub"
+        );
+        let com_sym_tab = compiler.symbol_table.get_outer().unwrap();
+        let global_sym_tab = Box::new(global_symbol_table.clone());
+        assert_eq!(
+            com_sym_tab, global_sym_tab,
+            "symbol table should be enclosed in the new scope"
+        );
+
+        compiler.leave_scope();
+        assert_eq!(
+            compiler.scope_index, 0,
+            "scope_index should be 0 after leaving scope"
+        );
+        assert_eq!(
+            compiler.symbol_table, global_symbol_table,
+            "compiler should restore global symbol table"
+        );
+
+        compiler.emit(Opcode::OpAdd, vec![]);
+        assert_eq!(
+            compiler.current_instructions().len(),
+            2,
+            "instructions length should be 2 after leaving scope"
+        );
+
+        let last = compiler.scopes[compiler.scope_index as usize].last_instruction;
+        assert_eq!(
+            last.opcode,
+            Opcode::OpAdd,
+            "last_instruction Opcode should be OpAdd"
+        );
+
+        let previous = compiler.scopes[compiler.scope_index as usize].prev_instruction;
+        assert_eq!(
+            previous.opcode,
+            Opcode::OpMul,
+            "previousInstruction Opcode should be OpMul"
+        );
+    }
 }
