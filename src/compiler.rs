@@ -1170,4 +1170,58 @@ mod tests {
 
         run_compiler_tests(tests);
     }
+
+    #[test]
+    fn test_index_expressions() {
+        let tests = vec![
+            CompilerTestCase {
+                input: "[1, 2, 3][1 + 1]".to_string(),
+                expected_constants: vec![
+                    Box::new(Integer { value: 1 }),
+                    Box::new(Integer { value: 2 }),
+                    Box::new(Integer { value: 3 }),
+                    Box::new(Integer { value: 1 }),
+                    Box::new(Integer { value: 1 }),
+                ],
+                expected_instructions: vec![
+                    make_instruction(Opcode::OpConstant, vec![0]),
+                    make_instruction(Opcode::OpConstant, vec![1]),
+                    make_instruction(Opcode::OpConstant, vec![2]),
+                    make_instruction(Opcode::OpArray, vec![3]),
+                    make_instruction(Opcode::OpConstant, vec![3]),
+                    make_instruction(Opcode::OpConstant, vec![4]),
+                    make_instruction(Opcode::OpAdd, vec![]),
+                    make_instruction(Opcode::OpIndex, vec![]),
+                    make_instruction(Opcode::OpPop, vec![]),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            },
+            CompilerTestCase {
+                input: "{1: 2}[2 - 1]".to_string(),
+                expected_constants: vec![
+                    Box::new(Integer { value: 1 }),
+                    Box::new(Integer { value: 2 }),
+                    Box::new(Integer { value: 2 }),
+                    Box::new(Integer { value: 1 }),
+                ],
+                expected_instructions: vec![
+                    make_instruction(Opcode::OpConstant, vec![0]),
+                    make_instruction(Opcode::OpConstant, vec![1]),
+                    make_instruction(Opcode::OpHash, vec![2]),
+                    make_instruction(Opcode::OpConstant, vec![2]),
+                    make_instruction(Opcode::OpConstant, vec![3]),
+                    make_instruction(Opcode::OpSub, vec![]),
+                    make_instruction(Opcode::OpIndex, vec![]),
+                    make_instruction(Opcode::OpPop, vec![]),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            },
+        ];
+
+        run_compiler_tests(tests);
+    }
 }
