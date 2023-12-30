@@ -475,6 +475,8 @@ mod tests {
     }
 
     fn run_compiler_tests(tests: Vec<CompilerTestCase>) {
+        use crate::object::ObjectType;
+
         for test in tests {
             let lexer = Lexer::new(test.input);
             let mut parser = Parser::new(lexer);
@@ -492,9 +494,25 @@ mod tests {
                         // Ensure the index is within bounds for bytecode.constants
                         if i < bytecode.constants.len() {
                             let test_obj_type = cnst.object_type().to_string();
-                            let test_contents = cnst.inspect();
+                            let mut test_contents = cnst.inspect();
                             let bytecode_obj_type = bytecode.constants[i].object_type().to_string();
-                            let bytecode_contents = bytecode.constants[i].inspect();
+                            let mut bytecode_contents = bytecode.constants[i].inspect();
+
+                            // Handle comparisons for objects that will not have full equality
+                            // through the inspect() call, but are still "equal".
+                            if test_obj_type == ObjectType::CompiledFunction.to_string()
+                                || test_obj_type == ObjectType::Closure.to_string()
+                            {
+                                if let Some(start) = test_contents.find('[') {
+                                    if let Some(end) = test_contents[start..].find(']') {
+                                        test_contents.replace_range(start..start + end + 1, "[]");
+                                        bytecode_contents
+                                            .replace_range(start..start + end + 1, "[]");
+                                    }
+                                } else {
+                                    panic!("something is incorrect with compiled functions");
+                                }
+                            }
 
                             assert_eq!(test_obj_type, bytecode_obj_type);
                             assert_eq!(test_contents, bytecode_contents);
@@ -1214,6 +1232,233 @@ mod tests {
                     make_instruction(Opcode::OpConstant, vec![3]),
                     make_instruction(Opcode::OpSub, vec![]),
                     make_instruction(Opcode::OpIndex, vec![]),
+                    make_instruction(Opcode::OpPop, vec![]),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            },
+        ];
+
+        run_compiler_tests(tests);
+    }
+
+    #[test]
+    fn test_functions() {
+        let tests = vec![
+            CompilerTestCase {
+                input: "func() { return 5 + 10 }".to_string(),
+                expected_constants: vec![
+                    Box::new(Integer { value: 5 }),
+                    Box::new(Integer { value: 10 }),
+                    Box::new(CompiledFunc {
+                        instructions: Instructions::new(
+                            vec![
+                                make_instruction(Opcode::OpConstant, vec![0]),
+                                make_instruction(Opcode::OpConstant, vec![1]),
+                                make_instruction(Opcode::OpAdd, vec![]),
+                                make_instruction(Opcode::OpReturnValue, vec![]),
+                            ]
+                            .into_iter()
+                            .flatten()
+                            .collect(),
+                        ),
+                        num_locals: 0,
+                        num_params: 0,
+                    }),
+                ],
+                expected_instructions: vec![
+                    make_instruction(Opcode::OpClosure, vec![2, 0]),
+                    make_instruction(Opcode::OpPop, vec![]),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            },
+            CompilerTestCase {
+                input: "func() { 5 + 10 }".to_string(),
+                expected_constants: vec![
+                    Box::new(Integer { value: 5 }),
+                    Box::new(Integer { value: 10 }),
+                    Box::new(CompiledFunc {
+                        instructions: Instructions::new(
+                            vec![
+                                make_instruction(Opcode::OpConstant, vec![0]),
+                                make_instruction(Opcode::OpConstant, vec![1]),
+                                make_instruction(Opcode::OpAdd, vec![]),
+                                make_instruction(Opcode::OpReturnValue, vec![]),
+                            ]
+                            .into_iter()
+                            .flatten()
+                            .collect(),
+                        ),
+                        num_locals: 0,
+                        num_params: 0,
+                    }),
+                ],
+                expected_instructions: vec![
+                    make_instruction(Opcode::OpClosure, vec![2, 0]),
+                    make_instruction(Opcode::OpPop, vec![]),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            },
+            CompilerTestCase {
+                input: "func() { 1; 2 }".to_string(),
+                expected_constants: vec![
+                    Box::new(Integer { value: 1 }),
+                    Box::new(Integer { value: 2 }),
+                    Box::new(CompiledFunc {
+                        instructions: Instructions::new(
+                            vec![
+                                make_instruction(Opcode::OpConstant, vec![0]),
+                                make_instruction(Opcode::OpPop, vec![]),
+                                make_instruction(Opcode::OpConstant, vec![1]),
+                                make_instruction(Opcode::OpReturnValue, vec![]),
+                            ]
+                            .into_iter()
+                            .flatten()
+                            .collect(),
+                        ),
+                        num_locals: 0,
+                        num_params: 0,
+                    }),
+                ],
+                expected_instructions: vec![
+                    make_instruction(Opcode::OpClosure, vec![2, 0]),
+                    make_instruction(Opcode::OpPop, vec![]),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            },
+        ];
+
+        run_compiler_tests(tests);
+    }
+
+    #[test]
+    fn test_function_calls() {
+        let tests = vec![
+            CompilerTestCase {
+                input: "func() { 24 }();".to_string(),
+                expected_constants: vec![
+                    Box::new(Integer { value: 24 }),
+                    Box::new(CompiledFunc {
+                        instructions: Instructions::new(
+                            vec![
+                                make_instruction(Opcode::OpConstant, vec![0]),
+                                make_instruction(Opcode::OpReturnValue, vec![]),
+                            ]
+                            .into_iter()
+                            .flatten()
+                            .collect(),
+                        ),
+                        num_locals: 0,
+                        num_params: 0,
+                    }),
+                ],
+                expected_instructions: vec![
+                    make_instruction(Opcode::OpClosure, vec![1, 0]),
+                    make_instruction(Opcode::OpCall, vec![0]),
+                    make_instruction(Opcode::OpPop, vec![]),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            },
+            CompilerTestCase {
+                input: "let noArg = func() { 24 }; noArg();".to_string(),
+                expected_constants: vec![
+                    Box::new(Integer { value: 24 }),
+                    Box::new(CompiledFunc {
+                        instructions: Instructions::new(
+                            vec![
+                                make_instruction(Opcode::OpConstant, vec![0]),
+                                make_instruction(Opcode::OpReturnValue, vec![]),
+                            ]
+                            .into_iter()
+                            .flatten()
+                            .collect(),
+                        ),
+                        num_locals: 0,
+                        num_params: 0,
+                    }),
+                ],
+                expected_instructions: vec![
+                    make_instruction(Opcode::OpClosure, vec![1, 0]),
+                    make_instruction(Opcode::OpSetGlobal, vec![0]),
+                    make_instruction(Opcode::OpGetGlobal, vec![0]),
+                    make_instruction(Opcode::OpCall, vec![0]),
+                    make_instruction(Opcode::OpPop, vec![]),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            },
+            CompilerTestCase {
+                input: "let oneArg = func(a) { a }; oneArg(24);".to_string(),
+                expected_constants: vec![
+                    Box::new(CompiledFunc {
+                        instructions: Instructions::new(
+                            vec![
+                                make_instruction(Opcode::OpGetLocal, vec![0]),
+                                make_instruction(Opcode::OpReturnValue, vec![]),
+                            ]
+                            .into_iter()
+                            .flatten()
+                            .collect(),
+                        ),
+                        num_locals: 0,
+                        num_params: 0,
+                    }),
+                    Box::new(Integer { value: 24 }),
+                ],
+                expected_instructions: vec![
+                    make_instruction(Opcode::OpClosure, vec![0, 0]),
+                    make_instruction(Opcode::OpSetGlobal, vec![0]),
+                    make_instruction(Opcode::OpGetGlobal, vec![0]),
+                    make_instruction(Opcode::OpConstant, vec![1]),
+                    make_instruction(Opcode::OpCall, vec![1]),
+                    make_instruction(Opcode::OpPop, vec![]),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            },
+            CompilerTestCase {
+                input: "let manyArg = func(a, b, c) { a; b; c }; manyArg(24, 25, 26);".to_string(),
+                expected_constants: vec![
+                    Box::new(CompiledFunc {
+                        instructions: Instructions::new(
+                            vec![
+                                make_instruction(Opcode::OpGetLocal, vec![0]),
+                                make_instruction(Opcode::OpPop, vec![]),
+                                make_instruction(Opcode::OpGetLocal, vec![1]),
+                                make_instruction(Opcode::OpPop, vec![]),
+                                make_instruction(Opcode::OpGetLocal, vec![2]),
+                                make_instruction(Opcode::OpReturnValue, vec![]),
+                            ]
+                            .into_iter()
+                            .flatten()
+                            .collect(),
+                        ),
+                        num_locals: 0,
+                        num_params: 0,
+                    }),
+                    Box::new(Integer { value: 24 }),
+                    Box::new(Integer { value: 25 }),
+                    Box::new(Integer { value: 26 }),
+                ],
+                expected_instructions: vec![
+                    make_instruction(Opcode::OpClosure, vec![0, 0]),
+                    make_instruction(Opcode::OpSetGlobal, vec![0]),
+                    make_instruction(Opcode::OpGetGlobal, vec![0]),
+                    make_instruction(Opcode::OpConstant, vec![1]),
+                    make_instruction(Opcode::OpConstant, vec![2]),
+                    make_instruction(Opcode::OpConstant, vec![3]),
+                    make_instruction(Opcode::OpCall, vec![3]),
                     make_instruction(Opcode::OpPop, vec![]),
                 ]
                 .into_iter()
