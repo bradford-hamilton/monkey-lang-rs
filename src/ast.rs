@@ -2,6 +2,7 @@ use crate::token::Token;
 use std::any::Any;
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
 
 /// Node - nodes in our ast will provide a token_literal and string methods for debugging.
 pub trait Node {
@@ -517,7 +518,29 @@ impl Expression for ArrayLiteral {
 pub struct HashLiteral {
     pub token: Token,
     /// The '{' token
-    pub pairs: HashMap<String, Box<dyn Expression>>,
+    pub pairs: HashMap<ExpressionKey, Box<dyn Expression>>,
+}
+
+pub struct ExpressionKey(pub Box<dyn Expression>);
+
+impl ExpressionKey {
+    pub fn new(expr: Box<dyn Expression>) -> Self {
+        ExpressionKey(expr)
+    }
+}
+
+impl PartialEq for ExpressionKey {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.string() == other.0.string()
+    }
+}
+
+impl Eq for ExpressionKey {}
+
+impl Hash for ExpressionKey {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.0.string().hash(state);
+    }
 }
 
 impl Node for HashLiteral {
@@ -530,7 +553,10 @@ impl Node for HashLiteral {
         let pairs = self
             .pairs
             .iter()
-            .map(|(key, value)| format!("{}: {}", key, value.string()))
+            .map(|(key, value)| {
+                let key_expr = &key.0;
+                format!("{}: {}", key_expr.string(), value.string())
+            })
             .collect::<Vec<String>>()
             .join(", ");
 

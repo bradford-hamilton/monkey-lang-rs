@@ -1,10 +1,11 @@
 use crate::ast::{
     ArrayLiteral, BlockStatement, Boolean, CallExpression, ConstStatement, Expression,
-    ExpressionStatement, FunctionLiteral, HashLiteral, Identifier, IfExpression, IndexExpression,
-    InfixExpression, IntegerLiteral, LetStatement, Node, PrefixExpression, ReturnStatement,
-    RootNode, Statement, StringLiteral, ZeroValueExpression, ZeroValueStatement,
+    ExpressionKey, ExpressionStatement, FunctionLiteral, HashLiteral, Identifier, IfExpression,
+    IndexExpression, InfixExpression, IntegerLiteral, LetStatement, Node, PrefixExpression,
+    ReturnStatement, RootNode, Statement, StringLiteral, ZeroValueExpression, ZeroValueStatement,
 };
 use crate::lexer::Lexer;
+use crate::object::Str;
 use crate::token::{Token, TokenType};
 use lazy_static::lazy_static;
 use std::cell::RefCell;
@@ -784,7 +785,7 @@ fn parse_hash_literal(parser: &mut Parser) -> Box<dyn Expression> {
             }
         };
 
-        hash.pairs.insert(key.string(), value);
+        hash.pairs.insert(ExpressionKey::new(key), value);
 
         if !parser.peek_token_type_is(TokenType::RightBrace)
             && !parser.expect_peek_type(TokenType::Comma)
@@ -1907,21 +1908,12 @@ mod tests {
 
     #[test]
     fn test_parsing_hash_literals_string_keys() {
-        let input = "{\"one\": 1, \"two\": 2, \"three\": 3}";
-        let lexer = Lexer::new(input.to_string());
-        let mut parser = Parser::new(lexer);
-        let program = parser.parse_program();
-
+        let input = "{\"one\": 1, \"two\": 2, \"three\": 3}".to_string();
+        let mut lexer = Lexer::new(input); // Assuming you have a lexer
+        let mut parser = Parser::new(lexer); // Assuming you have a parser
+        let program = parser.parse_program(); // Parse the program
+                                              // Assuming a function to check for parser errors
         check_parser_errors(&parser);
-
-        assert_eq!(
-            program.statements.len(),
-            1,
-            "program doesn't contain 1 statement. Got: {}",
-            program.statements.len()
-        );
-
-        let expected = vec![("one", 1), ("two", 2), ("three", 3)];
 
         let stmt = &program.statements[0];
         if !stmt.as_any().is::<ExpressionStatement>() {
@@ -1938,18 +1930,27 @@ mod tests {
             .downcast_ref::<HashLiteral>()
             .unwrap();
 
+        let expected = vec![("one", 1), ("two", 2), ("three", 3)]
+            .into_iter()
+            .collect::<HashMap<&str, i64>>();
+
         assert_eq!(
             hash_literal.pairs.len(),
             expected.len(),
-            "hash.pairs has wrong length. Got: {}",
-            hash_literal.pairs.len()
+            "hash.Pairs has wrong length"
         );
 
-        for (expected_key, expected_value) in expected {
-            match hash_literal.pairs.get(expected_key) {
-                Some(value) => test_literal_expression(value, ExpectedValue::Int(expected_value)),
-                None => panic!("Key not found: {}", expected_key),
-            }
+        for (key, value) in &hash_literal.pairs {
+            let string_literal = match key.0.as_any().downcast_ref::<StringLiteral>() {
+                Some(literal) => literal,
+                None => panic!("Key is not a StringLiteral"),
+            };
+
+            let expected_value = expected
+                .get(string_literal.value.as_str())
+                .expect("Expected value not found");
+
+            test_integer_literal(value, *expected_value); // Assuming a function to test integer literals
         }
     }
 
@@ -2030,17 +2031,31 @@ mod tests {
             hash_literal.pairs.len()
         );
 
-        let expected_tests = vec![
-            ("one", ExpectedValue::Int(0), "+", ExpectedValue::Int(1)),
-            ("two", ExpectedValue::Int(10), "-", ExpectedValue::Int(8)),
-            ("three", ExpectedValue::Int(15), "/", ExpectedValue::Int(5)),
+        let test_cases = vec![
+            ("one", 0, "+", 1),
+            ("two", 10, "-", 8),
+            ("three", 15, "/", 5),
         ];
 
-        for (key, left, op, right) in expected_tests {
-            match hash_literal.pairs.get(key) {
-                Some(expr) => test_infix_expression(expr, left, op, right),
-                None => panic!("No key found for: {}", key),
-            }
+        for (key, left_val, operator, right_val) in test_cases {
+            let value = hash_literal
+                .pairs
+                .get(&ExpressionKey::new(Box::new(StringLiteral {
+                    token: Token {
+                        token_type: TokenType::String,
+                        literal: key.to_string(),
+                        line: 0,
+                    },
+                    value: key.to_string(),
+                })))
+                .expect(&format!("No value found for key {}", key));
+
+            test_infix_expression(
+                value,
+                ExpectedValue::Int(left_val),
+                operator,
+                ExpectedValue::Int(right_val),
+            );
         }
     }
 

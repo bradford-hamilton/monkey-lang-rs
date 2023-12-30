@@ -1,8 +1,8 @@
 use crate::ast::{
     ArrayLiteral, BlockStatement, Boolean, CallExpression, ConstStatement, Expression,
-    ExpressionStatement, FunctionLiteral, HashLiteral, Identifier, IfExpression, IndexExpression,
-    InfixExpression, IntegerLiteral, LetStatement, Node, PrefixExpression, ReturnStatement,
-    RootNode, StringLiteral,
+    ExpressionKey, ExpressionStatement, FunctionLiteral, HashLiteral, Identifier, IfExpression,
+    IndexExpression, InfixExpression, IntegerLiteral, LetStatement, Node, PrefixExpression,
+    ReturnStatement, RootNode, StringLiteral,
 };
 use crate::builtins::BUILTINS;
 use crate::bytecode::make_instruction;
@@ -380,13 +380,22 @@ impl Compiler {
             }
             self.emit(Opcode::OpArray, vec![array_literal.elements.len() as i32]);
         } else if let Some(hash_literal) = node.as_any().downcast_ref::<HashLiteral>() {
-            let mut keys: Vec<_> = hash_literal.pairs.keys().collect();
-            keys.sort();
+            let mut keys: Vec<&ExpressionKey> = hash_literal.pairs.keys().collect();
+
+            // Sort keys based on their string representation
+            keys.sort_by(|a, b| a.0.string().cmp(&b.0.string()));
 
             for key in keys {
-                self.compile(hash_literal.pairs.get(key).unwrap().as_node())?;
-            }
+                // Compile the key
+                self.compile(key.0.as_node())?;
 
+                // Compile the value associated with the key
+                let value = hash_literal
+                    .pairs
+                    .get(key)
+                    .ok_or("key not found in hash literal".to_string())?;
+                self.compile(value.as_node())?;
+            }
             self.emit(Opcode::OpHash, vec![hash_literal.pairs.len() as i32 * 2]);
         } else if let Some(index_expr) = node.as_any().downcast_ref::<IndexExpression>() {
             self.compile(index_expr.left.as_node())?;
@@ -449,5 +458,716 @@ impl Compiler {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use crate::lexer::Lexer;
+    use crate::parser::Parser;
+
+    struct CompilerTestCase {
+        input: String,
+        expected_constants: Vec<Box<dyn Object>>,
+        expected_instructions: Vec<u8>,
+    }
+
+    fn run_compiler_tests(tests: Vec<CompilerTestCase>) {
+        for test in tests {
+            let lexer = Lexer::new(test.input);
+            let mut parser = Parser::new(lexer);
+            let program = parser.parse_program();
+            let mut compiler = Compiler::new();
+
+            match compiler.compile(&program) {
+                Ok(_) => {
+                    let bytecode = compiler.bytecode();
+                    assert_eq!(
+                        bytecode.instructions.as_vec_u8(),
+                        test.expected_instructions
+                    );
+                    for (i, cnst) in test.expected_constants.iter().enumerate() {
+                        // Ensure the index is within bounds for bytecode.constants
+                        if i < bytecode.constants.len() {
+                            let test_obj_type = cnst.object_type().to_string();
+                            let test_contents = cnst.inspect();
+                            let bytecode_obj_type = bytecode.constants[i].object_type().to_string();
+                            let bytecode_contents = bytecode.constants[i].inspect();
+
+                            assert_eq!(test_obj_type, bytecode_obj_type);
+                            assert_eq!(test_contents, bytecode_contents);
+                        } else {
+                            panic!("mismatch in the number of constants between test and bytecode");
+                        }
+                    }
+                }
+                Err(e) => panic!("compiler error: {}", e),
+            }
+        }
+    }
+
+    #[test]
+    fn test_integer_arithmetic() {
+        let tests = vec![
+            CompilerTestCase {
+                input: "1 + 2".to_string(),
+                expected_constants: vec![
+                    Box::new(Integer { value: 1 }),
+                    Box::new(Integer { value: 2 }),
+                ],
+                expected_instructions: vec![
+                    make_instruction(Opcode::OpConstant, vec![0]),
+                    make_instruction(Opcode::OpConstant, vec![1]),
+                    make_instruction(Opcode::OpAdd, vec![]),
+                    make_instruction(Opcode::OpPop, vec![]),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            },
+            CompilerTestCase {
+                input: "1; 2".to_string(),
+                expected_constants: vec![
+                    Box::new(Integer { value: 1 }),
+                    Box::new(Integer { value: 2 }),
+                ],
+                expected_instructions: vec![
+                    make_instruction(Opcode::OpConstant, vec![0]),
+                    make_instruction(Opcode::OpPop, vec![]),
+                    make_instruction(Opcode::OpConstant, vec![1]),
+                    make_instruction(Opcode::OpPop, vec![]),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            },
+            CompilerTestCase {
+                input: "1 - 2".to_string(),
+                expected_constants: vec![
+                    Box::new(Integer { value: 1 }),
+                    Box::new(Integer { value: 2 }),
+                ],
+                expected_instructions: vec![
+                    make_instruction(Opcode::OpConstant, vec![0]),
+                    make_instruction(Opcode::OpConstant, vec![1]),
+                    make_instruction(Opcode::OpSub, vec![]),
+                    make_instruction(Opcode::OpPop, vec![]),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            },
+            CompilerTestCase {
+                input: "1 * 2".to_string(),
+                expected_constants: vec![
+                    Box::new(Integer { value: 1 }),
+                    Box::new(Integer { value: 2 }),
+                ],
+                expected_instructions: vec![
+                    make_instruction(Opcode::OpConstant, vec![0]),
+                    make_instruction(Opcode::OpConstant, vec![1]),
+                    make_instruction(Opcode::OpMul, vec![]),
+                    make_instruction(Opcode::OpPop, vec![]),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            },
+            CompilerTestCase {
+                input: "2 / 1".to_string(),
+                expected_constants: vec![
+                    Box::new(Integer { value: 2 }),
+                    Box::new(Integer { value: 1 }),
+                ],
+                expected_instructions: vec![
+                    make_instruction(Opcode::OpConstant, vec![0]),
+                    make_instruction(Opcode::OpConstant, vec![1]),
+                    make_instruction(Opcode::OpDiv, vec![]),
+                    make_instruction(Opcode::OpPop, vec![]),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            },
+            CompilerTestCase {
+                input: "2 % 1".to_string(),
+                expected_constants: vec![
+                    Box::new(Integer { value: 2 }),
+                    Box::new(Integer { value: 1 }),
+                ],
+                expected_instructions: vec![
+                    make_instruction(Opcode::OpConstant, vec![0]),
+                    make_instruction(Opcode::OpConstant, vec![1]),
+                    make_instruction(Opcode::OpMod, vec![]),
+                    make_instruction(Opcode::OpPop, vec![]),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            },
+            CompilerTestCase {
+                input: "-1".to_string(),
+                expected_constants: vec![Box::new(Integer { value: 1 })],
+                expected_instructions: vec![
+                    make_instruction(Opcode::OpConstant, vec![0]),
+                    make_instruction(Opcode::OpMinus, vec![]),
+                    make_instruction(Opcode::OpPop, vec![]),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            },
+        ];
+
+        run_compiler_tests(tests);
+    }
+
+    // TODO: TestPostfixIncrementAndDecrement
+
+    #[test]
+    fn test_boolean_expressions() {
+        let tests = vec![
+            CompilerTestCase {
+                input: "true".to_string(),
+                expected_constants: vec![],
+                expected_instructions: vec![
+                    make_instruction(Opcode::OpTrue, vec![]),
+                    make_instruction(Opcode::OpPop, vec![]),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            },
+            CompilerTestCase {
+                input: "false".to_string(),
+                expected_constants: vec![],
+                expected_instructions: vec![
+                    make_instruction(Opcode::OpFalse, vec![]),
+                    make_instruction(Opcode::OpPop, vec![]),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            },
+            CompilerTestCase {
+                input: "1 > 2".to_string(),
+                expected_constants: vec![
+                    Box::new(Integer { value: 1 }),
+                    Box::new(Integer { value: 2 }),
+                ],
+                expected_instructions: vec![
+                    make_instruction(Opcode::OpConstant, vec![0]),
+                    make_instruction(Opcode::OpConstant, vec![1]),
+                    make_instruction(Opcode::OpGreater, vec![]),
+                    make_instruction(Opcode::OpPop, vec![]),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            },
+            CompilerTestCase {
+                input: "1 < 2".to_string(),
+                expected_constants: vec![
+                    Box::new(Integer { value: 2 }),
+                    Box::new(Integer { value: 1 }),
+                ],
+                expected_instructions: vec![
+                    make_instruction(Opcode::OpConstant, vec![0]),
+                    make_instruction(Opcode::OpConstant, vec![1]),
+                    make_instruction(Opcode::OpGreater, vec![]),
+                    make_instruction(Opcode::OpPop, vec![]),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            },
+            CompilerTestCase {
+                input: "1 <= 2".to_string(),
+                expected_constants: vec![
+                    Box::new(Integer { value: 2 }),
+                    Box::new(Integer { value: 1 }),
+                ],
+                expected_instructions: vec![
+                    make_instruction(Opcode::OpConstant, vec![0]),
+                    make_instruction(Opcode::OpConstant, vec![1]),
+                    make_instruction(Opcode::OpGreaterEqual, vec![]),
+                    make_instruction(Opcode::OpPop, vec![]),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            },
+            CompilerTestCase {
+                input: "1 >= 2".to_string(),
+                expected_constants: vec![
+                    Box::new(Integer { value: 1 }),
+                    Box::new(Integer { value: 2 }),
+                ],
+                expected_instructions: vec![
+                    make_instruction(Opcode::OpConstant, vec![0]),
+                    make_instruction(Opcode::OpConstant, vec![1]),
+                    make_instruction(Opcode::OpGreaterEqual, vec![]),
+                    make_instruction(Opcode::OpPop, vec![]),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            },
+            CompilerTestCase {
+                input: "1 == 2".to_string(),
+                expected_constants: vec![
+                    Box::new(Integer { value: 1 }),
+                    Box::new(Integer { value: 2 }),
+                ],
+                expected_instructions: vec![
+                    make_instruction(Opcode::OpConstant, vec![0]),
+                    make_instruction(Opcode::OpConstant, vec![1]),
+                    make_instruction(Opcode::OpEqualEqual, vec![]),
+                    make_instruction(Opcode::OpPop, vec![]),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            },
+            CompilerTestCase {
+                input: "1 != 2".to_string(),
+                expected_constants: vec![
+                    Box::new(Integer { value: 1 }),
+                    Box::new(Integer { value: 2 }),
+                ],
+                expected_instructions: vec![
+                    make_instruction(Opcode::OpConstant, vec![0]),
+                    make_instruction(Opcode::OpConstant, vec![1]),
+                    make_instruction(Opcode::OpNotEqual, vec![]),
+                    make_instruction(Opcode::OpPop, vec![]),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            },
+            CompilerTestCase {
+                input: "true == false".to_string(),
+                expected_constants: vec![],
+                expected_instructions: vec![
+                    make_instruction(Opcode::OpTrue, vec![]),
+                    make_instruction(Opcode::OpFalse, vec![]),
+                    make_instruction(Opcode::OpEqualEqual, vec![]),
+                    make_instruction(Opcode::OpPop, vec![]),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            },
+            CompilerTestCase {
+                input: "true != false".to_string(),
+                expected_constants: vec![],
+                expected_instructions: vec![
+                    make_instruction(Opcode::OpTrue, vec![]),
+                    make_instruction(Opcode::OpFalse, vec![]),
+                    make_instruction(Opcode::OpNotEqual, vec![]),
+                    make_instruction(Opcode::OpPop, vec![]),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            },
+            CompilerTestCase {
+                input: "true && false".to_string(),
+                expected_constants: vec![],
+                expected_instructions: vec![
+                    make_instruction(Opcode::OpTrue, vec![]),
+                    make_instruction(Opcode::OpFalse, vec![]),
+                    make_instruction(Opcode::OpAnd, vec![]),
+                    make_instruction(Opcode::OpPop, vec![]),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            },
+            CompilerTestCase {
+                input: "true || false".to_string(),
+                expected_constants: vec![],
+                expected_instructions: vec![
+                    make_instruction(Opcode::OpTrue, vec![]),
+                    make_instruction(Opcode::OpFalse, vec![]),
+                    make_instruction(Opcode::OpOr, vec![]),
+                    make_instruction(Opcode::OpPop, vec![]),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            },
+            CompilerTestCase {
+                input: "!true".to_string(),
+                expected_constants: vec![],
+                expected_instructions: vec![
+                    make_instruction(Opcode::OpTrue, vec![]),
+                    make_instruction(Opcode::OpBang, vec![]),
+                    make_instruction(Opcode::OpPop, vec![]),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            },
+        ];
+
+        run_compiler_tests(tests);
+    }
+
+    #[test]
+    fn test_conditionals() {
+        let tests = vec![
+            CompilerTestCase {
+                input: "if (true) { 10 }; 3333;".to_string(),
+                expected_constants: vec![
+                    Box::new(Integer { value: 10 }),
+                    Box::new(Integer { value: 3333 }),
+                ],
+                expected_instructions: vec![
+                    make_instruction(Opcode::OpTrue, vec![]),
+                    make_instruction(Opcode::OpJumpNotTruthy, vec![10]),
+                    make_instruction(Opcode::OpConstant, vec![0]),
+                    make_instruction(Opcode::OpJump, vec![11]),
+                    make_instruction(Opcode::OpNull, vec![]),
+                    make_instruction(Opcode::OpPop, vec![]),
+                    make_instruction(Opcode::OpConstant, vec![1]),
+                    make_instruction(Opcode::OpPop, vec![]),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            },
+            CompilerTestCase {
+                input: "if (true) { 10 } else { 20 }; 3333;".to_string(),
+                expected_constants: vec![
+                    Box::new(Integer { value: 10 }),
+                    Box::new(Integer { value: 20 }),
+                    Box::new(Integer { value: 3333 }),
+                ],
+                expected_instructions: vec![
+                    make_instruction(Opcode::OpTrue, vec![]),
+                    make_instruction(Opcode::OpJumpNotTruthy, vec![10]),
+                    make_instruction(Opcode::OpConstant, vec![0]),
+                    make_instruction(Opcode::OpJump, vec![13]),
+                    make_instruction(Opcode::OpConstant, vec![1]),
+                    make_instruction(Opcode::OpPop, vec![]),
+                    make_instruction(Opcode::OpConstant, vec![2]),
+                    make_instruction(Opcode::OpPop, vec![]),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            },
+        ];
+
+        run_compiler_tests(tests);
+    }
+
+    #[test]
+    fn test_global_let_statements() {
+        let tests = vec![
+            CompilerTestCase {
+                input: "
+                let one = 1;
+                let two = 2;
+            "
+                .to_string(),
+                expected_constants: vec![
+                    Box::new(Integer { value: 1 }),
+                    Box::new(Integer { value: 2 }),
+                ],
+                expected_instructions: vec![
+                    make_instruction(Opcode::OpConstant, vec![0]),
+                    make_instruction(Opcode::OpSetGlobal, vec![0]),
+                    make_instruction(Opcode::OpConstant, vec![1]),
+                    make_instruction(Opcode::OpSetGlobal, vec![1]),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            },
+            CompilerTestCase {
+                input: "
+                let one = 1;
+                one;
+            "
+                .to_string(),
+                expected_constants: vec![Box::new(Integer { value: 1 })],
+                expected_instructions: vec![
+                    make_instruction(Opcode::OpConstant, vec![0]),
+                    make_instruction(Opcode::OpSetGlobal, vec![0]),
+                    make_instruction(Opcode::OpGetGlobal, vec![0]),
+                    make_instruction(Opcode::OpPop, vec![]),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            },
+            CompilerTestCase {
+                input: "
+                let one = 1;
+                let two = one;
+                two;
+            "
+                .to_string(),
+                expected_constants: vec![Box::new(Integer { value: 1 })],
+                expected_instructions: vec![
+                    make_instruction(Opcode::OpConstant, vec![0]),
+                    make_instruction(Opcode::OpSetGlobal, vec![0]),
+                    make_instruction(Opcode::OpGetGlobal, vec![0]),
+                    make_instruction(Opcode::OpSetGlobal, vec![1]),
+                    make_instruction(Opcode::OpGetGlobal, vec![1]),
+                    make_instruction(Opcode::OpPop, vec![]),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            },
+        ];
+
+        run_compiler_tests(tests);
+    }
+
+    #[test]
+    fn test_global_const_statements() {
+        let tests = vec![
+            CompilerTestCase {
+                input: "
+                const one = 1;
+                const two = 2;
+            "
+                .to_string(),
+                expected_constants: vec![
+                    Box::new(Integer { value: 1 }),
+                    Box::new(Integer { value: 2 }),
+                ],
+                expected_instructions: vec![
+                    make_instruction(Opcode::OpConstant, vec![0]),
+                    make_instruction(Opcode::OpSetGlobal, vec![0]),
+                    make_instruction(Opcode::OpConstant, vec![1]),
+                    make_instruction(Opcode::OpSetGlobal, vec![1]),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            },
+            CompilerTestCase {
+                input: "
+                const one = 1;
+                one;
+            "
+                .to_string(),
+                expected_constants: vec![Box::new(Integer { value: 1 })],
+                expected_instructions: vec![
+                    make_instruction(Opcode::OpConstant, vec![0]),
+                    make_instruction(Opcode::OpSetGlobal, vec![0]),
+                    make_instruction(Opcode::OpGetGlobal, vec![0]),
+                    make_instruction(Opcode::OpPop, vec![]),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            },
+            CompilerTestCase {
+                input: "
+                const one = 1;
+                const two = one;
+                two;
+            "
+                .to_string(),
+                expected_constants: vec![Box::new(Integer { value: 1 })],
+                expected_instructions: vec![
+                    make_instruction(Opcode::OpConstant, vec![0]),
+                    make_instruction(Opcode::OpSetGlobal, vec![0]),
+                    make_instruction(Opcode::OpGetGlobal, vec![0]),
+                    make_instruction(Opcode::OpSetGlobal, vec![1]),
+                    make_instruction(Opcode::OpGetGlobal, vec![1]),
+                    make_instruction(Opcode::OpPop, vec![]),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            },
+        ];
+
+        run_compiler_tests(tests);
+    }
+
+    #[test]
+    fn test_string_expressions() {
+        use crate::object::Str;
+
+        let tests = vec![
+            CompilerTestCase {
+                input: "\"monkey\"".to_string(),
+                expected_constants: vec![Box::new(Str {
+                    value: "monkey".to_string(),
+                })],
+                expected_instructions: vec![
+                    make_instruction(Opcode::OpConstant, vec![0]),
+                    make_instruction(Opcode::OpPop, vec![]),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            },
+            CompilerTestCase {
+                input: "\"mon\" + \"key\"".to_string(),
+                expected_constants: vec![
+                    Box::new(Str {
+                        value: "mon".to_string(),
+                    }),
+                    Box::new(Str {
+                        value: "key".to_string(),
+                    }),
+                ],
+                expected_instructions: vec![
+                    make_instruction(Opcode::OpConstant, vec![0]),
+                    make_instruction(Opcode::OpConstant, vec![1]),
+                    make_instruction(Opcode::OpAdd, vec![]),
+                    make_instruction(Opcode::OpPop, vec![]),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            },
+        ];
+
+        run_compiler_tests(tests);
+    }
+
+    #[test]
+    fn test_array_literals() {
+        let tests = vec![
+            CompilerTestCase {
+                input: "[]".to_string(),
+                expected_constants: vec![],
+                expected_instructions: vec![
+                    make_instruction(Opcode::OpArray, vec![0]),
+                    make_instruction(Opcode::OpPop, vec![]),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            },
+            CompilerTestCase {
+                input: "[1, 2, 3]".to_string(),
+                expected_constants: vec![
+                    Box::new(Integer { value: 1 }),
+                    Box::new(Integer { value: 2 }),
+                    Box::new(Integer { value: 3 }),
+                ],
+                expected_instructions: vec![
+                    make_instruction(Opcode::OpConstant, vec![0]),
+                    make_instruction(Opcode::OpConstant, vec![1]),
+                    make_instruction(Opcode::OpConstant, vec![2]),
+                    make_instruction(Opcode::OpArray, vec![3]),
+                    make_instruction(Opcode::OpPop, vec![]),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            },
+            CompilerTestCase {
+                input: "[1 + 2, 3 - 4, 5 * 6]".to_string(),
+                expected_constants: vec![
+                    Box::new(Integer { value: 1 }),
+                    Box::new(Integer { value: 2 }),
+                    Box::new(Integer { value: 3 }),
+                    Box::new(Integer { value: 4 }),
+                    Box::new(Integer { value: 5 }),
+                    Box::new(Integer { value: 6 }),
+                ],
+                expected_instructions: vec![
+                    make_instruction(Opcode::OpConstant, vec![0]),
+                    make_instruction(Opcode::OpConstant, vec![1]),
+                    make_instruction(Opcode::OpAdd, vec![]),
+                    make_instruction(Opcode::OpConstant, vec![2]),
+                    make_instruction(Opcode::OpConstant, vec![3]),
+                    make_instruction(Opcode::OpSub, vec![]),
+                    make_instruction(Opcode::OpConstant, vec![4]),
+                    make_instruction(Opcode::OpConstant, vec![5]),
+                    make_instruction(Opcode::OpMul, vec![]),
+                    make_instruction(Opcode::OpArray, vec![3]),
+                    make_instruction(Opcode::OpPop, vec![]),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            },
+        ];
+
+        run_compiler_tests(tests);
+    }
+
+    #[test]
+    fn test_hash_literals() {
+        let tests = vec![
+            CompilerTestCase {
+                input: "{}".to_string(),
+                expected_constants: vec![],
+                expected_instructions: vec![
+                    make_instruction(Opcode::OpHash, vec![0]),
+                    make_instruction(Opcode::OpPop, vec![]),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            },
+            CompilerTestCase {
+                input: "{1: 2, 3: 4, 5: 6}".to_string(),
+                expected_constants: vec![
+                    Box::new(Integer { value: 1 }),
+                    Box::new(Integer { value: 2 }),
+                    Box::new(Integer { value: 3 }),
+                    Box::new(Integer { value: 4 }),
+                    Box::new(Integer { value: 5 }),
+                    Box::new(Integer { value: 6 }),
+                ],
+                expected_instructions: vec![
+                    make_instruction(Opcode::OpConstant, vec![0]),
+                    make_instruction(Opcode::OpConstant, vec![1]),
+                    make_instruction(Opcode::OpConstant, vec![2]),
+                    make_instruction(Opcode::OpConstant, vec![3]),
+                    make_instruction(Opcode::OpConstant, vec![4]),
+                    make_instruction(Opcode::OpConstant, vec![5]),
+                    make_instruction(Opcode::OpHash, vec![6]),
+                    make_instruction(Opcode::OpPop, vec![]),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            },
+            CompilerTestCase {
+                input: "{1: 2 + 3, 4: 5 * 6}".to_string(),
+                expected_constants: vec![
+                    Box::new(Integer { value: 1 }),
+                    Box::new(Integer { value: 2 }),
+                    Box::new(Integer { value: 3 }),
+                    Box::new(Integer { value: 4 }),
+                    Box::new(Integer { value: 5 }),
+                    Box::new(Integer { value: 6 }),
+                ],
+                expected_instructions: vec![
+                    make_instruction(Opcode::OpConstant, vec![0]),
+                    make_instruction(Opcode::OpConstant, vec![1]),
+                    make_instruction(Opcode::OpConstant, vec![2]),
+                    make_instruction(Opcode::OpAdd, vec![]),
+                    make_instruction(Opcode::OpConstant, vec![3]),
+                    make_instruction(Opcode::OpConstant, vec![4]),
+                    make_instruction(Opcode::OpConstant, vec![5]),
+                    make_instruction(Opcode::OpMul, vec![]),
+                    make_instruction(Opcode::OpHash, vec![4]),
+                    make_instruction(Opcode::OpPop, vec![]),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            },
+        ];
+
+        run_compiler_tests(tests);
     }
 }
