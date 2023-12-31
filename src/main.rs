@@ -49,5 +49,11 @@ fn compile_bytecode_and_run(root_node: RootNode) /* -> dyn Object */
 
     println!("code: {:?}", code.instructions.as_vec_u8());
 
-    let _vm = VirtualMachine::new(code);
+    let mut vm = VirtualMachine::new(code);
+
+    vm.run();
+
+    let ret = vm.last_popped_stack_element();
+
+    println!("Result: {:?}", ret.inspect());
 }

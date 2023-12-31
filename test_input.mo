@@ -1,1 +1,2 @@
-let a = "some string";
+let a = 5 + 10;
+a

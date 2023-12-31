@@ -139,7 +139,8 @@ impl<'a> VirtualMachine<'a> {
                 Opcode::OpSetGlobal => {
                     let global_index = read_uint16(&ins.0[ip + 1..]) as usize;
                     self.current_frame_mut().ip += 2;
-                    self.globals[global_index] = self.pop();
+                    let element = self.pop();
+                    self.globals.insert(global_index, element);
                 }
 
                 Opcode::OpGetGlobal => {
@@ -281,7 +282,7 @@ impl<'a> VirtualMachine<'a> {
         &self.frames[self.frames_index]
     }
 
-    fn last_popped_stack_element(&self) -> Rc<dyn Object> {
+    pub fn last_popped_stack_element(&self) -> Rc<dyn Object> {
         self.stack[self.sp as usize].clone()
     }
 
@@ -289,8 +290,7 @@ impl<'a> VirtualMachine<'a> {
         if self.sp >= STACK_SIZE as u64 {
             panic!("stack overflow");
         }
-
-        self.stack[self.sp as usize] = obj;
+        self.stack.insert(self.sp as usize, obj);
         self.sp += 1;
     }
 
