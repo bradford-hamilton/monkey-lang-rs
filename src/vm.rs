@@ -1,6 +1,6 @@
 use crate::ast::{ArrayLiteral, HashLiteral};
-use crate::builtins::Builtin;
-use crate::bytecode::Opcode;
+use crate::builtins::{Builtin, BUILTINS};
+use crate::bytecode::{read_uint16, read_uint8, Instructions, Opcode};
 use crate::compiler::Bytecode;
 use crate::frame::Frame;
 use crate::object::{
@@ -20,10 +20,10 @@ const GLOBALS_SIZE: i64 = 65536;
 // Defines the virtual machine. It holds the constant pool, instructions, a stack,
 // and an integer (index) that points to the next free slot in the stack.
 pub struct VirtualMachine<'a> {
-    constants: Vec<&'a Box<dyn Object>>,
+    constants: Vec<&'a Rc<dyn Object>>,
     stack: Vec<Rc<dyn Object>>,
     sp: u64,
-    globals: Vec<Box<dyn Object>>,
+    globals: Vec<Rc<dyn Object>>,
     frames: Vec<Frame>,
     frames_index: usize,
 }
@@ -54,14 +54,215 @@ impl<'a> VirtualMachine<'a> {
         }
     }
 
-    pub fn new_with_global_state(bytecode: Bytecode<'a>, state: Vec<Box<dyn Object>>) -> Self {
+    pub fn new_with_global_state(bytecode: Bytecode<'a>, state: Vec<Rc<dyn Object>>) -> Self {
         let mut vm = VirtualMachine::new(bytecode);
         vm.globals = state;
         vm
     }
 
+    pub fn run(&mut self) {
+        let mut ip: usize;
+        let mut ins: &Instructions;
+        let mut op: Opcode;
+
+        while self.current_frame().ip < self.current_frame().instructions().len() - 1 {
+            self.current_frame_mut().ip += 1;
+
+            ip = self.current_frame().ip as usize;
+            ins = self.current_frame().instructions();
+            op = Opcode::from(ins[ip]);
+
+            match op {
+                Opcode::OpConstant => {
+                    let const_index = read_uint16(&ins.0[ip + 1..]) as usize;
+                    self.current_frame_mut().ip += 2;
+
+                    let constant = self.constants[const_index];
+                    self.push(constant.clone());
+                }
+
+                Opcode::OpPop => {
+                    self.pop();
+                }
+
+                Opcode::OpAdd | Opcode::OpSub | Opcode::OpMul | Opcode::OpDiv | Opcode::OpMod => {
+                    self.execute_binary_operation(op);
+                }
+
+                Opcode::OpTrue => {
+                    self.push(Rc::new(Boolean { value: true }));
+                }
+
+                Opcode::OpFalse => {
+                    self.push(Rc::new(Boolean { value: false }));
+                }
+
+                Opcode::OpEqualEqual
+                | Opcode::OpNotEqual
+                | Opcode::OpGreater
+                | Opcode::OpGreaterEqual => {
+                    self.execute_comparison(op);
+                }
+
+                Opcode::OpAnd | Opcode::OpOr => {
+                    self.execute_logical_operator(op);
+                }
+
+                Opcode::OpBang => {
+                    self.execute_bang_operator();
+                }
+
+                Opcode::OpMinus => {
+                    self.execute_minus_operator();
+                }
+
+                // TODO: Opcode::OpPlusPlus | Opcode::OpMinusMinus => { self.execute_postfix_operator(op, ins, ip); }
+                Opcode::OpJump => {
+                    let pos = read_uint16(&ins.0[ip + 1..]) as i64;
+                    self.current_frame_mut().ip = pos - 1;
+                }
+
+                Opcode::OpJumpNotTruthy => {
+                    let pos = read_uint16(&ins.0[ip + 1..]) as i64;
+                    self.current_frame_mut().ip += 2;
+
+                    let condition = self.pop();
+                    if !is_truthy(condition) {
+                        self.current_frame_mut().ip = pos - 1;
+                    }
+                }
+
+                Opcode::OpNull => {
+                    self.push(Rc::new(Null {}));
+                }
+
+                Opcode::OpSetGlobal => {
+                    let global_index = read_uint16(&ins.0[ip + 1..]) as usize;
+                    self.current_frame_mut().ip += 2;
+                    self.globals[global_index] = self.pop();
+                }
+
+                Opcode::OpGetGlobal => {
+                    let global_index = read_uint16(&ins.0[ip + 1..]) as usize;
+                    self.current_frame_mut().ip += 2;
+                    if global_index >= self.globals.len() {
+                        panic!("global index {} is out of bounds", global_index);
+                    }
+                    self.push(Rc::clone(&self.globals[global_index]));
+                }
+
+                Opcode::OpArray => {
+                    let num_elements = read_uint16(&ins.0[ip + 1..]) as usize;
+                    self.current_frame_mut().ip += 2;
+
+                    let array = self.build_array(self.sp as usize - num_elements, self.sp as usize);
+                    self.sp -= num_elements as u64;
+
+                    self.push(array);
+                }
+
+                Opcode::OpHash => {
+                    let num_elements = read_uint16(&ins.0[ip + 1..]) as usize;
+                    self.current_frame_mut().ip += 2;
+
+                    let hash = self.build_hash(self.sp as usize - num_elements, self.sp as usize);
+                    self.sp -= num_elements as u64;
+
+                    self.push(hash);
+                }
+
+                Opcode::OpIndex => {
+                    let index = self.pop();
+                    let left = self.pop();
+
+                    self.execute_index_expr(left, index);
+                }
+
+                Opcode::OpCall => {
+                    let num_args = read_uint8(&ins.0[ip + 1..]) as usize;
+
+                    self.current_frame_mut().ip += 1;
+                    self.execute_call(num_args);
+                }
+
+                Opcode::OpReturnValue => {
+                    let return_value = self.pop();
+                    let frame = self.pop_frame();
+
+                    self.sp = frame.base_pointer as u64 - 1;
+                    self.push(return_value);
+                }
+
+                Opcode::OpReturn => {
+                    let frame = self.pop_frame();
+
+                    self.sp = frame.base_pointer as u64 - 1;
+                    self.push(Rc::new(Null {}));
+                }
+
+                Opcode::OpSetLocal => {
+                    let local_index = read_uint8(&ins.0[ip + 1..]) as usize;
+
+                    self.current_frame_mut().ip += 1;
+
+                    let frame = self.current_frame();
+                    let base_pointer = frame.base_pointer as usize;
+
+                    self.stack[base_pointer + local_index] = Rc::clone(&self.pop());
+                }
+
+                Opcode::OpGetLocal => {
+                    let local_index = read_uint8(&ins.0[ip + 1..]) as usize;
+                    self.current_frame_mut().ip += 1;
+
+                    let frame = self.current_frame();
+                    let base_pointer = frame.base_pointer as usize;
+
+                    let local_var = Rc::clone(&self.stack[base_pointer + local_index]);
+                    self.push(local_var);
+                }
+
+                Opcode::OpGetBuiltin => {
+                    let builtin_index = read_uint8(&ins.0[ip + 1..]) as usize;
+                    self.current_frame_mut().ip += 1;
+
+                    let definition = BUILTINS[builtin_index].clone();
+                    let builtin = definition.1;
+
+                    self.push(Rc::new(builtin));
+                }
+
+                Opcode::OpClosure => {
+                    let const_index = read_uint16(&ins.0[ip + 1..]) as usize;
+                    let num_free = read_uint8(&ins.0[ip + 3..]) as usize;
+
+                    self.current_frame_mut().ip += 3;
+                    self.push_closure(const_index, num_free);
+                }
+
+                Opcode::OpGetFree => {
+                    let free_index = read_uint8(&ins.0[ip + 1..]) as usize;
+                    self.current_frame_mut().ip += 1;
+
+                    let current_closure = self.current_frame().closure.clone();
+                    self.push(current_closure.free[free_index].clone());
+                }
+
+                Opcode::OpCurrentClosure => {
+                    self.push(self.current_frame().closure.clone());
+                }
+
+                _ => unimplemented!("invalid opcode: {:?}", op),
+            }
+        }
+    }
+
     fn current_frame(&self) -> &Frame {
         &self.frames[self.frames_index - 1]
+    }
+
+    fn current_frame_mut(&mut self) -> &mut Frame {
+        &mut self.frames[self.frames_index - 1]
     }
 
     fn push_frame(&mut self, frame: Frame) {
@@ -433,15 +634,15 @@ impl<'a> VirtualMachine<'a> {
             self.push(result);
         }
     }
+}
 
-    fn is_truthy(obj: Rc<dyn Object>) -> bool {
-        match obj.as_ref() {
-            obj_ref if obj_ref.as_any().is::<Boolean>() => {
-                obj_ref.as_any().downcast_ref::<Boolean>().unwrap().value
-            }
-            obj_ref if obj_ref.as_any().is::<Null>() => false,
-            _ => true,
+fn is_truthy(obj: Rc<dyn Object>) -> bool {
+    match obj.as_ref() {
+        obj_ref if obj_ref.as_any().is::<Boolean>() => {
+            obj_ref.as_any().downcast_ref::<Boolean>().unwrap().value
         }
+        obj_ref if obj_ref.as_any().is::<Null>() => false,
+        _ => true,
     }
 }
 

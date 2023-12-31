@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::ops::{Index, IndexMut};
 
 #[derive(Clone)]
-pub struct Instructions(Vec<u8>);
+pub struct Instructions(pub Vec<u8>);
 
 impl Instructions {
     pub fn new(data: Vec<u8>) -> Self {
@@ -100,11 +100,11 @@ fn read_operands(def: &Definition, ins: &[u8]) -> (Vec<u16>, usize) {
     (operands, offset)
 }
 
-fn read_uint16(ins: &[u8]) -> u16 {
+pub fn read_uint16(ins: &[u8]) -> u16 {
     ((ins[0] as u16) << 8) | (ins[1] as u16)
 }
 
-fn read_uint8(ins: &[u8]) -> u8 {
+pub fn read_uint8(ins: &[u8]) -> u8 {
     ins[0]
 }
 

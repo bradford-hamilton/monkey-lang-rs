@@ -26,7 +26,7 @@ impl Frame {
         }
     }
 
-    fn instructions(&self) -> &Instructions {
+    pub fn instructions(&self) -> &Instructions {
         &self.closure.func.instructions
     }
 }

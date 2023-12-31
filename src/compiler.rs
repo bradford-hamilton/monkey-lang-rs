@@ -9,12 +9,13 @@ use crate::bytecode::make_instruction;
 use crate::bytecode::{Instructions, Opcode};
 use crate::object::{CompiledFunc, Integer, Object};
 use crate::symbol_table::{Symbol, SymbolScope, SymbolTable};
+use std::rc::Rc;
 
 /// Bytecode contains the Instructions our compiler
 /// generated and the constants the compiler evaluated.
 pub struct Bytecode<'a> {
     pub instructions: Instructions,
-    pub constants: Vec<&'a Box<dyn Object>>,
+    pub constants: Vec<&'a Rc<dyn Object>>,
 }
 
 #[derive(Copy, Clone)]
@@ -46,7 +47,7 @@ struct CompilationScope {
 /// constants which serve as our constant pool, and the last and previous
 /// instructions
 pub struct Compiler {
-    constants: Vec<Box<dyn Object>>,
+    constants: Vec<Rc<dyn Object>>,
     symbol_table: SymbolTable,
     scopes: Vec<CompilationScope>,
     scope_index: i64,
@@ -114,7 +115,7 @@ impl Compiler {
         self.scopes[self.scope_index as usize].last_instruction = last;
     }
 
-    pub fn add_constant(&mut self, obj: Box<dyn Object>) -> usize {
+    pub fn add_constant(&mut self, obj: Rc<dyn Object>) -> usize {
         self.constants.push(obj);
         self.constants.len() - 1
     }
@@ -278,7 +279,7 @@ impl Compiler {
             let integer = Integer {
                 value: int_literal.value as i64,
             };
-            let constant_index = self.add_constant(Box::new(integer));
+            let constant_index = self.add_constant(Rc::new(integer));
             self.emit(Opcode::OpConstant, vec![constant_index as i32]);
         } else if let Some(boolean) = node.as_any().downcast_ref::<Boolean>() {
             if boolean.value {
@@ -373,7 +374,7 @@ impl Compiler {
             let string_obj = crate::object::Str {
                 value: string_lit.value.clone(),
             };
-            let constant_index = self.add_constant(Box::new(string_obj));
+            let constant_index = self.add_constant(Rc::new(string_obj));
             self.emit(Opcode::OpConstant, vec![constant_index as i32]);
         } else if let Some(array_literal) = node.as_any().downcast_ref::<ArrayLiteral>() {
             for el in &array_literal.elements {
@@ -438,7 +439,7 @@ impl Compiler {
                 num_params: func_literal.parameters.len(),
             };
 
-            let func_index = self.add_constant(Box::new(compiled_func));
+            let func_index = self.add_constant(Rc::new(compiled_func));
             self.emit(
                 Opcode::OpClosure,
                 vec![func_index as i32, free_symbols_len as i32],
