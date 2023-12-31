@@ -266,12 +266,12 @@ impl Hashable for Str {
 }
 
 pub struct HashPair {
-    key: Box<dyn Object>,
-    value: Box<dyn Object>,
+    pub key: Rc<dyn Object>,
+    pub value: Rc<dyn Object>,
 }
 
 pub struct HashMp {
-    pairs: HashMap<HashKey, HashPair>,
+    pub pairs: HashMap<HashKey, HashPair>,
 }
 
 impl Object for HashMp {
@@ -418,10 +418,10 @@ mod tests {
                 value: 1,
             },
             HashPair {
-                key: Box::new(Str {
+                key: Rc::new(Str {
                     value: String::from("monkey"),
                 }),
-                value: Box::new(Str {
+                value: Rc::new(Str {
                     value: String::from("lang"),
                 }),
             },

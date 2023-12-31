@@ -10,6 +10,7 @@ mod builtins;
 mod bytecode;
 mod compiler;
 mod environment;
+mod frame;
 mod lexer;
 mod object;
 mod parser;
