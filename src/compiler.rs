@@ -6,7 +6,7 @@ use crate::ast::{
 };
 use crate::builtins::BUILTINS;
 use crate::bytecode::make_instruction;
-use crate::bytecode::{self, Instructions, Opcode};
+use crate::bytecode::{Instructions, Opcode};
 use crate::object::{CompiledFunc, Integer, Object};
 use crate::symbol_table::{Symbol, SymbolScope, SymbolTable};
 

@@ -7,7 +7,6 @@ use crate::object::{
     Array, Boolean, Closure, CompiledFunc, HashKey, HashMp, Integer, Null, Object, ObjectType, Str,
 };
 use crate::object::{HashPair, Hashable};
-use core::num;
 use std::collections::HashMap;
 use std::rc::Rc;
 

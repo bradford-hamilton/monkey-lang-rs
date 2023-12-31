@@ -1,6 +1,5 @@
 use crate::object::{Array, Error, Integer, Null, Object, Str};
 use lazy_static::lazy_static;
-use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
 

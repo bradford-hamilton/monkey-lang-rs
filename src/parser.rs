@@ -5,7 +5,6 @@ use crate::ast::{
     ReturnStatement, RootNode, Statement, StringLiteral, ZeroValueExpression, ZeroValueStatement,
 };
 use crate::lexer::Lexer;
-use crate::object::Str;
 use crate::token::{Token, TokenType};
 use lazy_static::lazy_static;
 use std::cell::RefCell;
