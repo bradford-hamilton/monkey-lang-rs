@@ -1,10 +1,11 @@
 use crate::ast::{ArrayLiteral, HashLiteral};
 use crate::builtins::{Builtin, BUILTINS};
 use crate::bytecode::{read_uint16, read_uint8, Instructions, Opcode};
-use crate::compiler::Bytecode;
+use crate::compiler::{Bytecode, Compiler};
 use crate::frame::Frame;
 use crate::object::{
-    Array, Boolean, Closure, CompiledFunc, HashKey, HashMp, Integer, Null, Object, ObjectType, Str,
+    Array, Boolean, Closure, CompiledFunc, Error, HashKey, HashMp, Integer, Null, Object,
+    ObjectType, Str,
 };
 use crate::object::{HashPair, Hashable};
 use std::collections::HashMap;
@@ -693,4 +694,201 @@ fn coerce_obj_to_native_bool(object: Rc<dyn Object>) -> bool {
 
     // Default case for other object types
     true
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{ast::RootNode, lexer::Lexer, parser::Parser};
+
+    use super::*;
+
+    struct VmTestCase {
+        input: String,
+        expected: Expected,
+    }
+
+    fn run_vm_tests(tests: Vec<VmTestCase>) {
+        for test in tests {
+            let program = parse(test.input);
+            let mut comp = Compiler::new();
+
+            match comp.compile(&program) {
+                Ok(_) => {
+                    let mut vm = VirtualMachine::new(comp.bytecode());
+                    vm.run();
+                    let stack_elem = vm.last_popped_stack_element();
+                    test_expected_object(test.expected, stack_elem);
+                }
+                Err(err) => panic!("err compiling: {:?}", err),
+            }
+        }
+    }
+
+    fn parse(input: String) -> RootNode {
+        let lexer = Lexer::new(input);
+        let mut parser = Parser::new(lexer);
+        parser.parse_program()
+    }
+
+    enum Expected {
+        Integer(i64),
+        Boolean(bool),
+        Null,
+        Str(String),
+        IntegerArray(Vec<i64>),
+        HashMap(HashMap<HashKey, i64>), // Assuming you have a HashKey type and Hash object defined
+        Error(String),                  // Assuming a simple String message for errors
+    }
+
+    fn test_expected_object(expected: Expected, actual: Rc<dyn Object>) {
+        match expected {
+            Expected::Integer(expected) => {
+                test_integer_object(expected, &actual); // Implement this
+            }
+            Expected::Boolean(expected) => {
+                test_boolean_object(expected, &actual); // Implement this
+            }
+            Expected::Null => {
+                assert!(actual.as_any().is::<Null>()); // Assuming a Null type is defined
+            }
+            Expected::Str(expected) => {
+                test_string_object(expected, &actual); // Implement this
+            }
+            Expected::IntegerArray(expected) => {
+                let array = actual.as_any().downcast_ref::<Array>().unwrap();
+                assert_eq!(array.elements.len(), expected.len());
+                for (expected_elem, actual_elem) in expected.iter().zip(array.elements.iter()) {
+                    test_integer_object(*expected_elem, actual_elem); // Implement this
+                }
+            }
+            Expected::HashMap(expected) => {
+                let hash = actual.as_any().downcast_ref::<HashMp>().unwrap();
+                assert_eq!(hash.pairs.len(), expected.len());
+                for (expected_key, expected_value) in expected {
+                    let pair = hash.pairs.get(&expected_key).unwrap();
+                    test_integer_object(expected_value, &pair.value); // Implement this
+                }
+            }
+            Expected::Error(expected_message) => {
+                let err_obj = actual.as_any().downcast_ref::<Error>().unwrap();
+                assert_eq!(err_obj.message, expected_message);
+            }
+        }
+    }
+
+    fn test_integer_object(expected: i64, actual: &Rc<dyn Object>) {
+        if let Some(result) = actual.as_any().downcast_ref::<Integer>() {
+            assert_eq!(
+                result.value, expected,
+                "object has wrong value. Expected: {}. Got: {}",
+                expected, result.value
+            );
+        } else {
+            panic!("object is not an Integer. Got: {:?}", actual.inspect());
+        }
+    }
+
+    fn test_boolean_object(expected: bool, actual: &Rc<dyn Object>) {
+        if let Some(result) = actual.as_any().downcast_ref::<Boolean>() {
+            assert_eq!(
+                result.value, expected,
+                "object has wrong value. Expected: {}, Got: {}",
+                expected, result.value
+            );
+        } else {
+            panic!("object is not Boolean. Got: {:?}", actual.inspect());
+        }
+    }
+
+    fn test_string_object(expected: String, actual: &Rc<dyn Object>) {
+        if let Some(result) = actual.as_any().downcast_ref::<Str>() {
+            assert_eq!(
+                result.value, expected,
+                "Object has wrong value. Expected: {:?}, Got: {:?}",
+                expected, result.value
+            );
+        } else {
+            panic!("Object is not a String. Got: {:?}", actual.inspect());
+        }
+    }
+
+    #[test]
+    fn test_integer_arithmetic() {
+        let tests = vec![
+            VmTestCase {
+                input: "1".to_string(),
+                expected: Expected::Integer(1),
+            },
+            VmTestCase {
+                input: "2".to_string(),
+                expected: Expected::Integer(2),
+            },
+            VmTestCase {
+                input: "1 + 2".to_string(),
+                expected: Expected::Integer(3),
+            },
+            VmTestCase {
+                input: "1 - 2".to_string(),
+                expected: Expected::Integer(-1),
+            },
+            VmTestCase {
+                input: "1 * 2".to_string(),
+                expected: Expected::Integer(2),
+            },
+            VmTestCase {
+                input: "4 / 2".to_string(),
+                expected: Expected::Integer(2),
+            },
+            VmTestCase {
+                input: "50 / 2 * 2 + 10 - 5".to_string(),
+                expected: Expected::Integer(55),
+            },
+            VmTestCase {
+                input: "5 + 5 + 5 + 5 - 10".to_string(),
+                expected: Expected::Integer(10),
+            },
+            VmTestCase {
+                input: "2 * 2 * 2 * 2 * 2".to_string(),
+                expected: Expected::Integer(32),
+            },
+            VmTestCase {
+                input: "5 * 2 + 10".to_string(),
+                expected: Expected::Integer(20),
+            },
+            VmTestCase {
+                input: "5 + 2 * 10".to_string(),
+                expected: Expected::Integer(25),
+            },
+            VmTestCase {
+                input: "5 * (2 + 10)".to_string(),
+                expected: Expected::Integer(60),
+            },
+            VmTestCase {
+                input: "-5".to_string(),
+                expected: Expected::Integer(-5),
+            },
+            VmTestCase {
+                input: "-10".to_string(),
+                expected: Expected::Integer(-10),
+            },
+            VmTestCase {
+                input: "-50 + 100 + -50".to_string(),
+                expected: Expected::Integer(0),
+            },
+            VmTestCase {
+                input: "(5 + 10 * 2 + 15 / 3) * 2 + -10".to_string(),
+                expected: Expected::Integer(50),
+            },
+            VmTestCase {
+                input: "10 % 3".to_string(),
+                expected: Expected::Integer(1),
+            },
+            VmTestCase {
+                input: "(10 % 3) + 8 % 3".to_string(),
+                expected: Expected::Integer(3),
+            },
+        ];
+
+        run_vm_tests(tests);
+    }
 }
