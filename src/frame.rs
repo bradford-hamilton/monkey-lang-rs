@@ -1,4 +1,5 @@
-use crate::{bytecode::Instructions, object};
+use crate::{bytecode::Instructions, object::Closure};
+use std::rc::Rc;
 
 // Frame - Data structure that holds execution-relevant information. Short for "call frame" or "stack frame"
 // and sometimes "activation record". On real machines a frame is not something separate from, but a designated
@@ -11,13 +12,13 @@ use crate::{bytecode::Instructions, object};
 // implemented, the requirements in regards to concurrency and performance, the host language, and more.
 // We are choosing the way that is easiest to build, understand, extend, etc.
 pub struct Frame {
-    closure: object::Closure,
-    ip: i64,
-    base_pointer: i64,
+    pub closure: Rc<Closure>,
+    pub ip: i64,
+    pub base_pointer: i64,
 }
 
 impl Frame {
-    pub fn new(closure: object::Closure, base_pointer: i64) -> Self {
+    pub fn new(closure: Rc<Closure>, base_pointer: i64) -> Self {
         Frame {
             closure,
             ip: -1,

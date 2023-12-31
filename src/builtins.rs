@@ -17,7 +17,7 @@ impl Builtin {
             func: Arc::new(func),
         }
     }
-    fn call(&self, args: Vec<Rc<dyn Object>>) -> Rc<dyn Object> {
+    pub fn call(&self, args: Vec<Rc<dyn Object>>) -> Rc<dyn Object> {
         (self.func)(args)
     }
 }

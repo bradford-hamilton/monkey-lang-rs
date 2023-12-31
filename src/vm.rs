@@ -1,5 +1,5 @@
-use crate::ast::ExpressionKey;
 use crate::ast::{ArrayLiteral, HashLiteral};
+use crate::builtins::Builtin;
 use crate::bytecode::Opcode;
 use crate::compiler::Bytecode;
 use crate::frame::Frame;
@@ -7,6 +7,7 @@ use crate::object::{
     Array, Boolean, Closure, CompiledFunc, HashKey, HashMp, Integer, Null, Object, ObjectType, Str,
 };
 use crate::object::{HashPair, Hashable};
+use core::num;
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -35,10 +36,10 @@ impl<'a> VirtualMachine<'a> {
             num_locals: 0,
             num_params: 0,
         };
-        let main_closure = Closure {
+        let main_closure = Rc::new(Closure {
             func: main_func,
             free: vec![],
-        };
+        });
         let main_frame = Frame::new(main_closure, 0);
         let mut frames = Vec::with_capacity(MAX_FRAMES as usize);
 
@@ -52,6 +53,12 @@ impl<'a> VirtualMachine<'a> {
             frames,
             frames_index: 1,
         }
+    }
+
+    pub fn new_with_global_state(bytecode: Bytecode<'a>, state: Vec<Box<dyn Object>>) -> Self {
+        let mut vm = VirtualMachine::new(bytecode);
+        vm.globals = state;
+        vm
     }
 
     fn current_frame(&self) -> &Frame {
@@ -77,15 +84,6 @@ impl<'a> VirtualMachine<'a> {
     fn last_popped_stack_element(&self) -> Rc<dyn Object> {
         self.stack[self.sp as usize].clone()
     }
-    // pub fn last_popped_stack_element(&self) -> Option<&Box<dyn Object>> {
-    //     if self.sp > 0 {
-    //         self.stack.get(self.sp - 1)
-    //     } else {
-    //         None
-    //     }
-    // }
-    // This also applies to some other vm methods here that panic instead
-    // of using errors.
 
     fn push(&mut self, obj: Rc<dyn Object>) {
         if self.sp >= STACK_SIZE as u64 {
@@ -102,11 +100,23 @@ impl<'a> VirtualMachine<'a> {
         obj
     }
 
+    fn execute_call(&mut self, num_args: usize) {
+        let callee = Rc::clone(&self.stack[self.sp as usize - 1 - num_args]);
+
+        if let Some(closure) = callee.as_any().downcast_ref::<Closure>() {
+            self.call_closure(Rc::new(closure.clone()), num_args);
+        } else if let Some(builtin) = callee.as_any().downcast_ref::<Builtin>() {
+            self.call_builtin(Rc::new(builtin.clone()), num_args);
+        } else {
+            panic!("calling non-function and non-builtin");
+        }
+    }
+
     fn execute_binary_integer_operation(
         &mut self,
         op: Opcode,
-        left: Box<dyn Object>,
-        right: Box<dyn Object>,
+        left: Rc<dyn Object>,
+        right: Rc<dyn Object>,
     ) {
         let left_value = match left.as_any().downcast_ref::<Integer>() {
             Some(integer) => integer.value,
@@ -133,8 +143,8 @@ impl<'a> VirtualMachine<'a> {
     fn execute_binary_string_operation(
         &mut self,
         op: Opcode,
-        left: Box<dyn Object>,
-        right: Box<dyn Object>,
+        left: Rc<dyn Object>,
+        right: Rc<dyn Object>,
     ) {
         if op != Opcode::OpAdd {
             panic!("unknown String operator: {:?}", op);
@@ -155,6 +165,40 @@ impl<'a> VirtualMachine<'a> {
         }));
     }
 
+    fn execute_binary_operation(&mut self, op: Opcode) {
+        let right = self.pop();
+        let left = self.pop();
+
+        let left_type = left.object_type();
+        let right_type = right.object_type();
+
+        match (&left_type, &right_type) {
+            (ObjectType::Integer, ObjectType::Integer) => {
+                self.execute_binary_integer_operation(op, left, right)
+            }
+            (ObjectType::String, ObjectType::String) => {
+                self.execute_binary_string_operation(op, left, right)
+            }
+            _ => panic!(
+                "unsupported types for binary operation: {:?} {:?}",
+                left_type, right_type
+            ),
+        }
+    }
+
+    fn execute_minus_operator(&mut self) {
+        let operand = self.pop();
+
+        match operand.as_any().downcast_ref::<Integer>() {
+            Some(integer) => {
+                self.push(Rc::new(Integer {
+                    value: -integer.value,
+                }));
+            }
+            None => panic!("unsupported type for negation: {}", operand.object_type()),
+        }
+    }
+
     fn execute_bang_operator(&mut self) {
         let operand = self.pop();
         let result = match operand.as_ref().object_type() {
@@ -172,6 +216,76 @@ impl<'a> VirtualMachine<'a> {
         };
 
         self.push(result);
+    }
+
+    fn execute_integer_comparison(
+        &mut self,
+        op: Opcode,
+        left: Rc<dyn Object>,
+        right: Rc<dyn Object>,
+    ) {
+        let left_value = left.as_any().downcast_ref::<Integer>().unwrap().value;
+        let right_value = right.as_any().downcast_ref::<Integer>().unwrap().value;
+
+        match op {
+            Opcode::OpEqualEqual => {
+                self.push(native_bool_to_boolean_obj(right_value == left_value));
+            }
+            Opcode::OpNotEqual => self.push(native_bool_to_boolean_obj(right_value != left_value)),
+            Opcode::OpGreater => self.push(native_bool_to_boolean_obj(left_value > right_value)),
+            Opcode::OpGreaterEqual => {
+                self.push(native_bool_to_boolean_obj(left_value >= right_value));
+            }
+            _ => panic!("unknown operator: {:?}", op),
+        }
+    }
+
+    fn execute_comparison(&mut self, op: Opcode) {
+        let right = self.pop();
+        let left = self.pop();
+
+        if left.object_type() == ObjectType::Integer || right.object_type() == ObjectType::Integer {
+            self.execute_integer_comparison(op, left, right);
+        } else {
+            match op {
+                Opcode::OpEqualEqual => {
+                    if left.object_type() == ObjectType::String
+                        && right.object_type() == ObjectType::String
+                    {
+                        self.push(native_bool_to_boolean_obj(
+                            left.inspect() == right.inspect(),
+                        ));
+                    } else {
+                        self.push(native_bool_to_boolean_obj(Rc::ptr_eq(&left, &right)));
+                    }
+                }
+                Opcode::OpNotEqual => {
+                    if left.object_type() == ObjectType::String
+                        && right.object_type() == ObjectType::String
+                    {
+                        self.push(native_bool_to_boolean_obj(
+                            left.inspect() != right.inspect(),
+                        ));
+                    } else {
+                        self.push(native_bool_to_boolean_obj(!Rc::ptr_eq(&left, &right)));
+                    }
+                }
+                _ => panic!("Unknown operator: {:?}", op),
+            }
+        }
+    }
+
+    fn execute_logical_operator(&mut self, op: Opcode) {
+        let right = self.pop();
+        let left = self.pop();
+
+        let result = match op {
+            Opcode::OpAnd => coerce_obj_to_native_bool(left) && coerce_obj_to_native_bool(right),
+            Opcode::OpOr => coerce_obj_to_native_bool(left) || coerce_obj_to_native_bool(right),
+            _ => panic!("unknown logical operator: {:?}", op),
+        };
+
+        self.push(native_bool_to_boolean_obj(result));
     }
 
     // TODO:
@@ -209,6 +323,26 @@ impl<'a> VirtualMachine<'a> {
         Rc::new(HashMp { pairs })
     }
 
+    fn execute_index_expr(&mut self, left: Rc<dyn Object>, index: Rc<dyn Object>) {
+        match left.object_type() {
+            ObjectType::Array => {
+                if let Some(index_obj) = index.as_any().downcast_ref::<Integer>() {
+                    self.execute_array_index(left, Rc::new(index_obj.clone()));
+                } else {
+                    panic!(
+                        "index operator not supported for type: {}",
+                        index.object_type()
+                    );
+                }
+            }
+            ObjectType::Hash => self.execute_hash_index(left, index),
+            _ => panic!(
+                "index operator not supported for type: {}",
+                left.object_type()
+            ),
+        }
+    }
+
     fn execute_array_index(&mut self, array: Rc<dyn Object>, index: Rc<dyn Object>) {
         let array_obj = array.as_any().downcast_ref::<Array>().unwrap();
         let index_obj = index.as_any().downcast_ref::<Integer>().unwrap();
@@ -244,18 +378,84 @@ impl<'a> VirtualMachine<'a> {
             None => self.push(Rc::new(Null {})),
         }
     }
+
+    fn call_closure(&mut self, closure: Rc<dyn Object>, num_args: usize) {
+        let closure = closure.as_any().downcast_ref::<Closure>().unwrap();
+        if num_args != closure.func.num_params {
+            panic!(
+                "wrong number of arguments. Expected: {}. Got: {}",
+                closure.func.num_params, num_args
+            );
+        }
+        let closure_num_locals = closure.func.num_locals;
+        let c = Rc::new(Closure {
+            func: closure.func.clone(),
+            free: closure.free.clone(),
+        });
+        let frame = Frame::new(c, self.sp as i64 - num_args as i64);
+
+        self.push_frame(frame);
+        self.sp = self.current_frame().base_pointer as u64 + closure_num_locals as u64;
+    }
+
+    fn push_closure(&mut self, const_index: usize, num_free: usize) {
+        let constant = &self.constants[const_index];
+        let function = constant.as_any().downcast_ref::<CompiledFunc>().unwrap();
+        let mut free = Vec::with_capacity(num_free);
+
+        for i in 0..num_free {
+            let free_obj = Rc::clone(&self.stack[self.sp as usize - num_free + i]);
+            free.push(free_obj);
+        }
+
+        self.sp -= num_free as u64;
+
+        let closure = Rc::new(Closure {
+            func: function.clone(),
+            free,
+        });
+
+        self.push(closure);
+    }
+
+    fn call_builtin(&mut self, builtin: Rc<dyn Object>, num_args: usize) {
+        let builtin_func = builtin.as_any().downcast_ref::<Builtin>().unwrap();
+        let args: Vec<Rc<dyn Object>> = self.stack[self.sp as usize - num_args..self.sp as usize]
+            .iter()
+            .cloned()
+            .collect();
+        let result = builtin_func.call(args);
+
+        self.sp -= num_args as u64 + 1;
+
+        if result.as_any().is::<Null>() {
+            self.push(Rc::new(Null {}));
+        } else {
+            self.push(result);
+        }
+    }
+
+    fn is_truthy(obj: Rc<dyn Object>) -> bool {
+        match obj.as_ref() {
+            obj_ref if obj_ref.as_any().is::<Boolean>() => {
+                obj_ref.as_any().downcast_ref::<Boolean>().unwrap().value
+            }
+            obj_ref if obj_ref.as_any().is::<Null>() => false,
+            _ => true,
+        }
+    }
 }
 
-fn native_bool_to_boolean_obj(input: bool) -> Box<dyn Object> {
+fn native_bool_to_boolean_obj(input: bool) -> Rc<dyn Object> {
     if input {
-        Box::new(Boolean { value: true })
+        Rc::new(Boolean { value: true })
     } else {
-        Box::new(Boolean { value: false })
+        Rc::new(Boolean { value: false })
     }
 }
 
 // Coerce the different object types to booleans for truthy/falsey values.
-fn coerce_obj_to_native_bool(object: Box<dyn Object>) -> bool {
+fn coerce_obj_to_native_bool(object: Rc<dyn Object>) -> bool {
     // Check for Boolean type
     if object.object_type() == ObjectType::Boolean {
         if let Some(boolean_obj) = object.as_any().downcast_ref::<Boolean>() {

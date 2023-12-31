@@ -56,6 +56,7 @@ impl Display for ObjectType {
     }
 }
 
+#[derive(Clone)]
 pub struct Integer {
     pub value: i64,
 }
@@ -126,6 +127,7 @@ impl Object for Boolean {
 /// to the VM to allocate the correct amount of stack space ("hole") to save the local
 /// bindings
 // TODO: check back in on this comment after implementing.
+#[derive(Clone)]
 pub struct CompiledFunc {
     pub instructions: bytecode::Instructions,
     pub num_locals: usize,
@@ -144,9 +146,10 @@ impl Object for CompiledFunc {
     }
 }
 
+#[derive(Clone)]
 pub struct Closure {
     pub func: CompiledFunc,
-    pub free: Vec<Box<dyn Object>>,
+    pub free: Vec<Rc<dyn Object>>,
 }
 
 impl Object for Closure {
