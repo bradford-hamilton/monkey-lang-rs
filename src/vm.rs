@@ -1744,4 +1744,146 @@ mod tests {
 
         run_vm_tests(tests);
     }
+
+    #[test]
+    fn test_closures() {
+        let tests = vec![
+            VmTestCase {
+                input: "
+                let newClosure = func(a) {
+                    func() { a; };
+                };
+                let closure = newClosure(99);
+                closure();
+            "
+                .to_string(),
+                expected: Expected::Integer(99),
+            },
+            VmTestCase {
+                input: "
+                let newAdder = func(a, b) {
+                    func(c) { a + b + c };
+                };
+                let adder = newAdder(1, 2);
+                adder(8);
+            "
+                .to_string(),
+                expected: Expected::Integer(11),
+            },
+            VmTestCase {
+                input: "
+                let newAdder = func(a, b) {
+                    let c = a + b;
+                    func(d) { c + d };
+                };
+                let adder = newAdder(1, 2);
+                adder(8);
+            "
+                .to_string(),
+                expected: Expected::Integer(11),
+            },
+            VmTestCase {
+                input: "
+                let newAdderOuter = func(a, b) {
+                    let c = a + b;
+                    func(d) {
+                        let e = d + c;
+                        func(f) { e + f; };
+                    };
+                };
+                let newAdderInner = newAdderOuter(1, 2);
+                let adder = newAdderInner(3);
+                adder(8);
+            "
+                .to_string(),
+                expected: Expected::Integer(14),
+            },
+            VmTestCase {
+                input: "
+                let a = 1;
+                let newAdderOuter = func(b) {
+                    func(c) {
+                        func(d) { a + b + c + d };
+                    };
+                };
+                let newAdderInner = newAdderOuter(2);
+                let adder = newAdderInner(3);
+                adder(8);
+            "
+                .to_string(),
+                expected: Expected::Integer(14),
+            },
+            VmTestCase {
+                input: "
+                let newClosure = func(a, b) {
+                    let one = func() { a; };
+                    let two = func() { b; };
+                    func() { one() + two(); };
+                };
+                let closure = newClosure(9, 90);
+                closure();
+            "
+                .to_string(),
+                expected: Expected::Integer(99),
+            },
+        ];
+
+        run_vm_tests(tests);
+    }
+
+    #[test]
+    fn test_recursive_functions() {
+        let tests = vec![
+            VmTestCase {
+                input: "
+                let countDown = func(x) {
+                    if (x == 0) {
+                        return 0;
+                    } else {
+                        countDown(x - 1);
+                    }
+                };
+                countDown(1);
+            "
+                .to_string(),
+                expected: Expected::Integer(0),
+            },
+            VmTestCase {
+                input: "
+                let countDown = func(x) {
+                    if (x == 0) {
+                        return 0;
+                    } else {
+                        countDown(x - 1);
+                    }
+                };
+                let wrapper = func() {
+                    countDown(1);
+                };
+                wrapper();
+            "
+                .to_string(),
+                expected: Expected::Integer(0),
+            },
+            VmTestCase {
+                input: "
+                let wrapper = func() {
+                    let countDown = func(x) {
+                        if (x == 0) {
+                            return 0;
+                        } else {
+                            countDown(x - 1);
+                        }
+                    };
+                    countDown(1);
+                };
+                wrapper();
+            "
+                .to_string(),
+                expected: Expected::Integer(0),
+            },
+        ];
+
+        run_vm_tests(tests);
+    }
 }
