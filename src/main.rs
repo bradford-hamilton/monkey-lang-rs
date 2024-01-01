@@ -31,8 +31,7 @@ fn main() {
     compile_bytecode_and_run(program);
 }
 
-fn compile_bytecode_and_run(root_node: RootNode) /* -> dyn Object */
-{
+fn compile_bytecode_and_run(root_node: RootNode) {
     let mut compiler = Compiler::new();
     let result = compiler.compile(&root_node);
 
@@ -46,14 +45,7 @@ fn compile_bytecode_and_run(root_node: RootNode) /* -> dyn Object */
     }
 
     let code = compiler.bytecode();
-
-    println!("code: {:?}", code.instructions.as_vec_u8());
-
     let mut vm = VirtualMachine::new(code);
 
     vm.run();
-
-    let ret = vm.last_popped_stack_element();
-
-    println!("Result: {:?}", ret.inspect());
 }
