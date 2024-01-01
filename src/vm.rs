@@ -1,7 +1,7 @@
 use crate::ast::{ArrayLiteral, HashLiteral};
 use crate::builtins::{Builtin, BUILTINS};
 use crate::bytecode::{read_uint16, read_uint8, Instructions, Opcode};
-use crate::compiler::{Bytecode, Compiler};
+use crate::compiler::Bytecode;
 use crate::frame::Frame;
 use crate::object::{
     Array, Boolean, Closure, CompiledFunc, Error, HashKey, HashMp, Integer, Null, Object,
@@ -271,7 +271,7 @@ impl<'a> VirtualMachine<'a> {
         if self.frames_index >= self.frames.capacity() {
             panic!("exceeded maximum frames capacity");
         }
-        self.frames[self.frames_index] = frame;
+        self.frames.insert(self.frames_index, frame);
         self.frames_index += 1;
     }
 
@@ -291,7 +291,12 @@ impl<'a> VirtualMachine<'a> {
         if self.sp >= STACK_SIZE as u64 {
             panic!("stack overflow");
         }
-        self.stack.insert(self.sp as usize, obj);
+
+        if self.sp as usize >= self.stack.len() {
+            self.stack.resize(self.sp as usize + 1, Rc::new(Null {}));
+        }
+
+        self.stack[self.sp as usize] = obj;
         self.sp += 1;
     }
 
@@ -450,28 +455,16 @@ impl<'a> VirtualMachine<'a> {
         } else {
             match op {
                 Opcode::OpEqualEqual => {
-                    if left.object_type() == ObjectType::String
-                        && right.object_type() == ObjectType::String
-                    {
-                        self.push(native_bool_to_boolean_obj(
-                            left.inspect() == right.inspect(),
-                        ));
-                    } else {
-                        self.push(native_bool_to_boolean_obj(Rc::ptr_eq(&left, &right)));
-                    }
+                    self.push(native_bool_to_boolean_obj(
+                        left.inspect() == right.inspect(),
+                    ));
                 }
                 Opcode::OpNotEqual => {
-                    if left.object_type() == ObjectType::String
-                        && right.object_type() == ObjectType::String
-                    {
-                        self.push(native_bool_to_boolean_obj(
-                            left.inspect() != right.inspect(),
-                        ));
-                    } else {
-                        self.push(native_bool_to_boolean_obj(!Rc::ptr_eq(&left, &right)));
-                    }
+                    self.push(native_bool_to_boolean_obj(
+                        left.inspect() != right.inspect(),
+                    ));
                 }
-                _ => panic!("Unknown operator: {:?}", op),
+                _ => panic!("unknown operator: {:?}", op),
             }
         }
     }
@@ -589,14 +582,15 @@ impl<'a> VirtualMachine<'a> {
             );
         }
         let closure_num_locals = closure.func.num_locals;
-        let c = Rc::new(Closure {
+        let cl = Rc::new(Closure {
             func: closure.func.clone(),
             free: closure.free.clone(),
         });
-        let frame = Frame::new(c, self.sp as i64 - num_args as i64);
+        let frame = Frame::new(cl, self.sp as i64 - num_args as i64);
+        let frame_bp = frame.base_pointer;
 
         self.push_frame(frame);
-        self.sp = self.current_frame().base_pointer as u64 + closure_num_locals as u64;
+        self.sp = frame_bp as u64 + closure_num_locals as u64;
     }
 
     fn push_closure(&mut self, const_index: usize, num_free: usize) {
@@ -627,7 +621,7 @@ impl<'a> VirtualMachine<'a> {
             .collect();
         let result = builtin_func.call(args);
 
-        self.sp -= num_args as u64 + 1;
+        self.sp -= num_args as u64 - 1;
 
         if result.as_any().is::<Null>() {
             self.push(Rc::new(Null {}));
@@ -698,9 +692,8 @@ fn coerce_obj_to_native_bool(object: Rc<dyn Object>) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use crate::{ast::RootNode, lexer::Lexer, parser::Parser};
-
     use super::*;
+    use crate::{ast::RootNode, compiler::Compiler, lexer::Lexer, parser::Parser};
 
     struct VmTestCase {
         input: String,
@@ -736,29 +729,55 @@ mod tests {
         Null,
         Str(String),
         IntegerArray(Vec<i64>),
-        HashMap(HashMap<HashKey, i64>), // Assuming you have a HashKey type and Hash object defined
-        Error(String),                  // Assuming a simple String message for errors
+        StringArray(Vec<String>),
+        HashMap(HashMap<HashKey, i64>),
+        Error(String),
     }
 
     fn test_expected_object(expected: Expected, actual: Rc<dyn Object>) {
         match expected {
             Expected::Integer(expected) => {
-                test_integer_object(expected, &actual); // Implement this
+                test_integer_object(expected, &actual);
             }
             Expected::Boolean(expected) => {
-                test_boolean_object(expected, &actual); // Implement this
+                test_boolean_object(expected, &actual);
             }
             Expected::Null => {
-                assert!(actual.as_any().is::<Null>()); // Assuming a Null type is defined
+                assert!(actual.as_any().is::<Null>());
             }
             Expected::Str(expected) => {
-                test_string_object(expected, &actual); // Implement this
+                test_string_object(expected, &actual);
             }
             Expected::IntegerArray(expected) => {
                 let array = actual.as_any().downcast_ref::<Array>().unwrap();
                 assert_eq!(array.elements.len(), expected.len());
                 for (expected_elem, actual_elem) in expected.iter().zip(array.elements.iter()) {
-                    test_integer_object(*expected_elem, actual_elem); // Implement this
+                    test_integer_object(*expected_elem, actual_elem);
+                }
+            }
+            Expected::StringArray(expected) => {
+                match actual.as_any().downcast_ref::<Array>() {
+                    Some(array) => {
+                        assert_eq!(array.elements.len(), expected.len());
+                        for (expected_elem, actual_elem) in
+                            expected.iter().zip(array.elements.iter())
+                        {
+                            let string_obj = actual_elem.as_any().downcast_ref::<Str>().unwrap();
+                            assert_eq!(&string_obj.value, expected_elem);
+                        }
+                    }
+                    None => {
+                        // Handle case where actual is not an Array, but a Str
+                        if let Some(string_obj) = actual.as_any().downcast_ref::<Str>() {
+                            // Expected string array should contain only one element in this case
+                            assert_eq!(&string_obj.value, &expected[0]);
+                        } else {
+                            panic!(
+                                "Expected a String or String Array, found: {:?}",
+                                actual.inspect()
+                            );
+                        }
+                    }
                 }
             }
             Expected::HashMap(expected) => {
@@ -766,7 +785,7 @@ mod tests {
                 assert_eq!(hash.pairs.len(), expected.len());
                 for (expected_key, expected_value) in expected {
                     let pair = hash.pairs.get(&expected_key).unwrap();
-                    test_integer_object(expected_value, &pair.value); // Implement this
+                    test_integer_object(expected_value, &pair.value);
                 }
             }
             Expected::Error(expected_message) => {
@@ -886,6 +905,840 @@ mod tests {
             VmTestCase {
                 input: "(10 % 3) + 8 % 3".to_string(),
                 expected: Expected::Integer(3),
+            },
+        ];
+
+        run_vm_tests(tests);
+    }
+
+    #[test]
+    fn test_boolean_expressions() {
+        let tests = vec![
+            VmTestCase {
+                input: "true".to_string(),
+                expected: Expected::Boolean(true),
+            },
+            VmTestCase {
+                input: "false".to_string(),
+                expected: Expected::Boolean(false),
+            },
+            VmTestCase {
+                input: "1 < 2".to_string(),
+                expected: Expected::Boolean(true),
+            },
+            VmTestCase {
+                input: "1 > 2".to_string(),
+                expected: Expected::Boolean(false),
+            },
+            VmTestCase {
+                input: "1 < 1".to_string(),
+                expected: Expected::Boolean(false),
+            },
+            VmTestCase {
+                input: "1 > 1".to_string(),
+                expected: Expected::Boolean(false),
+            },
+            VmTestCase {
+                input: "2 <= 2".to_string(),
+                expected: Expected::Boolean(true),
+            },
+            VmTestCase {
+                input: "2 >= 2".to_string(),
+                expected: Expected::Boolean(true),
+            },
+            VmTestCase {
+                input: "1 == 1".to_string(),
+                expected: Expected::Boolean(true),
+            },
+            VmTestCase {
+                input: "1 != 1".to_string(),
+                expected: Expected::Boolean(false),
+            },
+            VmTestCase {
+                input: "1 == 2".to_string(),
+                expected: Expected::Boolean(false),
+            },
+            VmTestCase {
+                input: "1 != 2".to_string(),
+                expected: Expected::Boolean(true),
+            },
+            VmTestCase {
+                input: "true == true".to_string(),
+                expected: Expected::Boolean(true),
+            },
+            VmTestCase {
+                input: "false == false".to_string(),
+                expected: Expected::Boolean(true),
+            },
+            VmTestCase {
+                input: "true == false".to_string(),
+                expected: Expected::Boolean(false),
+            },
+            VmTestCase {
+                input: "true != false".to_string(),
+                expected: Expected::Boolean(true),
+            },
+            VmTestCase {
+                input: "false != true".to_string(),
+                expected: Expected::Boolean(true),
+            },
+            VmTestCase {
+                input: "\"monkey\" != \"monkey\"".to_string(),
+                expected: Expected::Boolean(false),
+            },
+            VmTestCase {
+                input: "\"monkey\" == \"monkey\"".to_string(),
+                expected: Expected::Boolean(true),
+            },
+            VmTestCase {
+                input: "(1 < 2) == true".to_string(),
+                expected: Expected::Boolean(true),
+            },
+            VmTestCase {
+                input: "(1 < 2) == false".to_string(),
+                expected: Expected::Boolean(false),
+            },
+            VmTestCase {
+                input: "(1 > 2) == true".to_string(),
+                expected: Expected::Boolean(false),
+            },
+            VmTestCase {
+                input: "(1 > 2) == false".to_string(),
+                expected: Expected::Boolean(true),
+            },
+            VmTestCase {
+                input: "(2 <= 2) == true".to_string(),
+                expected: Expected::Boolean(true),
+            },
+            VmTestCase {
+                input: "(2 <= 2) == false".to_string(),
+                expected: Expected::Boolean(false),
+            },
+            VmTestCase {
+                input: "(2 >= 2) == true".to_string(),
+                expected: Expected::Boolean(true),
+            },
+            VmTestCase {
+                input: "(2 >= 2) == false".to_string(),
+                expected: Expected::Boolean(false),
+            },
+            VmTestCase {
+                input: "!true".to_string(),
+                expected: Expected::Boolean(false),
+            },
+            VmTestCase {
+                input: "!false".to_string(),
+                expected: Expected::Boolean(true),
+            },
+            VmTestCase {
+                input: "!5".to_string(),
+                expected: Expected::Boolean(false),
+            },
+            VmTestCase {
+                input: "!!true".to_string(),
+                expected: Expected::Boolean(true),
+            },
+            VmTestCase {
+                input: "!!false".to_string(),
+                expected: Expected::Boolean(false),
+            },
+            VmTestCase {
+                input: "!!5".to_string(),
+                expected: Expected::Boolean(true),
+            },
+            VmTestCase {
+                input: "!(if (false) { 5; })".to_string(),
+                expected: Expected::Boolean(true),
+            },
+            VmTestCase {
+                input: "true && true".to_string(),
+                expected: Expected::Boolean(true),
+            },
+            VmTestCase {
+                input: "true && false".to_string(),
+                expected: Expected::Boolean(false),
+            },
+            VmTestCase {
+                input: "true || false".to_string(),
+                expected: Expected::Boolean(true),
+            },
+            VmTestCase {
+                input: "!(true || false)".to_string(),
+                expected: Expected::Boolean(false),
+            },
+            VmTestCase {
+                input: "!(if (true && false) { 5; })".to_string(),
+                expected: Expected::Boolean(true),
+            },
+        ];
+
+        run_vm_tests(tests);
+    }
+
+    #[test]
+    fn test_conditionals() {
+        let tests = vec![
+            VmTestCase {
+                input: "if (true) { 10 }".to_string(),
+                expected: Expected::Integer(10),
+            },
+            VmTestCase {
+                input: "if (true) { 10 } else { 20 }".to_string(),
+                expected: Expected::Integer(10),
+            },
+            VmTestCase {
+                input: "if (false) { 10 } else { 20 }".to_string(),
+                expected: Expected::Integer(20),
+            },
+            VmTestCase {
+                input: "if (1) { 10 }".to_string(),
+                expected: Expected::Integer(10),
+            },
+            VmTestCase {
+                input: "if (1 < 2) { 10 }".to_string(),
+                expected: Expected::Integer(10),
+            },
+            VmTestCase {
+                input: "if (1 < 2) { 10 } else { 20 }".to_string(),
+                expected: Expected::Integer(10),
+            },
+            VmTestCase {
+                input: "if (1 > 2) { 10 } else { 20 }".to_string(),
+                expected: Expected::Integer(20),
+            },
+            VmTestCase {
+                input: "if (1 > 2) { 10 }".to_string(),
+                expected: Expected::Null,
+            },
+            VmTestCase {
+                input: "if (false) { 10 }".to_string(),
+                expected: Expected::Null,
+            },
+            VmTestCase {
+                input: "if ((if (false) { 10 })) { 10 } else { 20 }".to_string(),
+                expected: Expected::Integer(20),
+            },
+        ];
+
+        run_vm_tests(tests);
+    }
+
+    #[test]
+    fn test_global_let_statements() {
+        let tests = vec![
+            VmTestCase {
+                input: "let one = 1; one".to_string(),
+                expected: Expected::Integer(1),
+            },
+            VmTestCase {
+                input: "let one = 1; let two = 2; one + two".to_string(),
+                expected: Expected::Integer(3),
+            },
+            VmTestCase {
+                input: "let one = 1; let two = one + one; one + two".to_string(),
+                expected: Expected::Integer(3),
+            },
+            // TODO: after postfix
+            // VmTestCase {
+            //     input: "let one = 1; one++; one;".to_string(),
+            //     expected: Expected::Integer(2),
+            // },
+            // VmTestCase {
+            //     input: "let one = 1; one--; one;".to_string(),
+            //     expected: Expected::Integer(0),
+            // },
+        ];
+
+        run_vm_tests(tests);
+    }
+
+    #[test]
+    fn test_global_const_statements() {
+        let tests = vec![
+            VmTestCase {
+                input: "const one = 1; one".to_string(),
+                expected: Expected::Integer(1),
+            },
+            VmTestCase {
+                input: "const one = 1; const two = 2; one + two".to_string(),
+                expected: Expected::Integer(3),
+            },
+            VmTestCase {
+                input: "const one = 1; const two = one + one; one + two".to_string(),
+                expected: Expected::Integer(3),
+            },
+        ];
+
+        run_vm_tests(tests);
+    }
+
+    #[test]
+    fn test_string_expressions() {
+        let tests = vec![
+            VmTestCase {
+                input: "\"monkey\"".to_string(),
+                expected: Expected::Str("monkey".to_string()),
+            },
+            VmTestCase {
+                input: "\"mon\" + \"key\"".to_string(),
+                expected: Expected::Str("monkey".to_string()),
+            },
+            VmTestCase {
+                input: "\"mon\" + \"key\" + \"banana\"".to_string(),
+                expected: Expected::Str("monkeybanana".to_string()),
+            },
+        ];
+
+        run_vm_tests(tests);
+    }
+
+    #[test]
+    fn test_array_literals() {
+        let tests = vec![
+            VmTestCase {
+                input: "[]".to_string(),
+                expected: Expected::IntegerArray(vec![]),
+            },
+            VmTestCase {
+                input: "[1, 2, 3]".to_string(),
+                expected: Expected::IntegerArray(vec![1, 2, 3]),
+            },
+            VmTestCase {
+                input: "[1 + 2, 3 * 4, 5 + 6]".to_string(),
+                expected: Expected::IntegerArray(vec![3, 12, 11]),
+            },
+        ];
+
+        run_vm_tests(tests);
+    }
+
+    #[test]
+    fn test_hash_literals() {
+        let empty_hash = HashMap::new();
+
+        let mut hash_one = HashMap::new();
+        hash_one.insert(Integer { value: 1 }.hash_key(), 2);
+        hash_one.insert(Integer { value: 2 }.hash_key(), 3);
+
+        let mut hash_two = HashMap::new();
+        hash_two.insert(Integer { value: 2 }.hash_key(), 4);
+        hash_two.insert(Integer { value: 6 }.hash_key(), 16);
+
+        let tests = vec![
+            VmTestCase {
+                input: "{}".to_string(),
+                expected: Expected::HashMap(empty_hash),
+            },
+            VmTestCase {
+                input: "{1: 2, 2: 3}".to_string(),
+                expected: Expected::HashMap(hash_one),
+            },
+            VmTestCase {
+                input: "{1 + 1: 2 * 2, 3 + 3: 4 * 4}".to_string(),
+                expected: Expected::HashMap(hash_two),
+            },
+        ];
+
+        run_vm_tests(tests);
+    }
+
+    #[test]
+    fn test_index_expressions() {
+        use std::collections::HashMap;
+
+        let mut hash_one = HashMap::new();
+        hash_one.insert(Integer { value: 1 }.hash_key(), 1);
+        hash_one.insert(Integer { value: 2 }.hash_key(), 2);
+
+        let tests = vec![
+            VmTestCase {
+                input: "[1, 2, 3][1]".to_string(),
+                expected: Expected::Integer(2),
+            },
+            VmTestCase {
+                input: "[1, 2, 3][0 + 2]".to_string(),
+                expected: Expected::Integer(3),
+            },
+            VmTestCase {
+                input: "[[1, 1, 1]][0][0]".to_string(),
+                expected: Expected::Integer(1),
+            },
+            VmTestCase {
+                input: "[][0]".to_string(),
+                expected: Expected::Null,
+            },
+            VmTestCase {
+                input: "[1, 2, 3][99]".to_string(),
+                expected: Expected::Null,
+            },
+            VmTestCase {
+                input: "[1][-1]".to_string(),
+                expected: Expected::Null,
+            },
+            VmTestCase {
+                input: "{1: 1, 2: 2}[1]".to_string(),
+                expected: Expected::Integer(1),
+            },
+            VmTestCase {
+                input: "{1: 1, 2: 2}[2]".to_string(),
+                expected: Expected::Integer(2),
+            },
+            VmTestCase {
+                input: "{1: 1}[0]".to_string(),
+                expected: Expected::Null,
+            },
+            VmTestCase {
+                input: "{}[0]".to_string(),
+                expected: Expected::Null,
+            },
+        ];
+
+        run_vm_tests(tests);
+    }
+
+    #[test]
+    fn test_calling_functions_without_arguments() {
+        let tests = vec![
+            VmTestCase {
+                input: "
+                let fivePlusTen = func() { 5 + 10; };
+                fivePlusTen();
+            "
+                .to_string(),
+                expected: Expected::Integer(15),
+            },
+            VmTestCase {
+                input: "
+                let one = func() { 1; };
+                let two = func() { 2; };
+                one() + two()
+            "
+                .to_string(),
+                expected: Expected::Integer(3),
+            },
+            VmTestCase {
+                input: "
+                let a = func() { 1 };
+                let b = func() { a() + 1 };
+                let c = func() { b() + 1 };
+                c();
+            "
+                .to_string(),
+                expected: Expected::Integer(3),
+            },
+        ];
+
+        run_vm_tests(tests);
+    }
+
+    #[test]
+    fn test_functions_with_return_statement() {
+        let tests = vec![
+            VmTestCase {
+                input: "
+                let earlyExit = func() { return 99; 100; };
+                earlyExit();
+            "
+                .to_string(),
+                expected: Expected::Integer(99),
+            },
+            VmTestCase {
+                input: "
+                let earlyExit = func() { return 99; return 100; };
+                earlyExit();
+            "
+                .to_string(),
+                expected: Expected::Integer(99),
+            },
+            // TODO: after postfix:
+            // VmTestCase {
+            //     input: "
+            //     let postfixReturn = func() { let one = 1; one++; return one; };
+            //     postfixReturn();
+            // "
+            //     .to_string(),
+            //     expected: Expected::Integer(2),
+            // },
+        ];
+
+        run_vm_tests(tests);
+    }
+
+    #[test]
+    fn test_functions_without_return_value() {
+        let tests = vec![
+            VmTestCase {
+                input: "
+                let noReturn = func() { };
+                noReturn();
+            "
+                .to_string(),
+                expected: Expected::Null,
+            },
+            VmTestCase {
+                input: "
+                let noReturn = func() { };
+                let noReturnTwo = func() { noReturn(); };
+                noReturn();
+                noReturnTwo();
+            "
+                .to_string(),
+                expected: Expected::Null,
+            },
+        ];
+
+        run_vm_tests(tests);
+    }
+
+    #[test]
+    fn test_first_class_functions() {
+        let tests = vec![
+            VmTestCase {
+                input: "
+                let returnsOne = func() { 1; };
+                let returnsOneReturner = func() { returnsOne; };
+                returnsOneReturner()();
+            "
+                .to_string(),
+                expected: Expected::Integer(1),
+            },
+            VmTestCase {
+                input: "
+                let returnsOneReturner = func() {
+                    let returnsOne = func() { 1; };
+                    returnsOne;
+                };
+                returnsOneReturner()();
+            "
+                .to_string(),
+                expected: Expected::Integer(1),
+            },
+        ];
+
+        run_vm_tests(tests);
+    }
+
+    #[test]
+    fn test_calling_functions_with_bindings() {
+        let tests = vec![
+            VmTestCase {
+                input: "
+                let one = func() { let one = 1; one };
+                one();
+            "
+                .to_string(),
+                expected: Expected::Integer(1),
+            },
+            VmTestCase {
+                input: "
+                let oneAndTwo = func() { let one = 1; let two = 2; one + two; };
+                oneAndTwo();
+            "
+                .to_string(),
+                expected: Expected::Integer(3),
+            },
+            VmTestCase {
+                input: "
+                let oneAndTwo = func() { let one = 1; let two = 2; one + two; };
+                let threeAndFour = func() { let three = 3; let four = 4; three + four; };
+                oneAndTwo() + threeAndFour();
+            "
+                .to_string(),
+                expected: Expected::Integer(10),
+            },
+            VmTestCase {
+                input: "
+                let firstFoobar = func() { let foobar = 50; foobar; };
+                let secondFoobar = func() { let foobar = 100; foobar; };
+                firstFoobar() + secondFoobar();
+            "
+                .to_string(),
+                expected: Expected::Integer(150),
+            },
+            VmTestCase {
+                input: "
+                let globalSeed = 50;
+                let minusOne = func() {
+                    let num = 1;
+                    globalSeed - num;
+                };
+                let minusTwo = func() {
+                    let num = 2;
+                    globalSeed - num;
+                };
+                minusOne() + minusTwo();
+            "
+                .to_string(),
+                expected: Expected::Integer(97),
+            },
+        ];
+
+        run_vm_tests(tests);
+    }
+
+    #[test]
+    fn test_calling_functions_with_arguments_and_bindings() {
+        let tests = vec![
+            VmTestCase {
+                input: "
+                let identity = func(a) { a; };
+                identity(4);
+            "
+                .to_string(),
+                expected: Expected::Integer(4),
+            },
+            VmTestCase {
+                input: "
+                let sum = func(a, b) { a + b; };
+                sum(1, 2);
+            "
+                .to_string(),
+                expected: Expected::Integer(3),
+            },
+            VmTestCase {
+                input: "
+                let sum = func(a, b) {
+                    let c = a + b;
+                    c;
+                };
+                sum(1, 2);
+            "
+                .to_string(),
+                expected: Expected::Integer(3),
+            },
+            VmTestCase {
+                input: "
+                let sum = func(a, b) {
+                    let c = a + b;
+                    c;
+                };
+                sum(1, 2) + sum(3, 4);
+            "
+                .to_string(),
+                expected: Expected::Integer(10),
+            },
+            VmTestCase {
+                input: "
+                let sum = func(a, b) {
+                    let c = a + b;
+                    c;
+                };
+                let outer = func() {
+                    sum(1, 2) + sum(3, 4);
+                };
+                outer();
+            "
+                .to_string(),
+                expected: Expected::Integer(10),
+            },
+            VmTestCase {
+                input: "
+                let globalNum = 10;
+
+                let sum = func(a, b) {
+                    let c = a + b;
+                    c + globalNum;
+                };
+
+                let outer = func() {
+                    sum(1, 2) + sum(3, 4) + globalNum;
+                };
+
+                outer() + globalNum;
+            "
+                .to_string(),
+                expected: Expected::Integer(50),
+            },
+        ];
+
+        run_vm_tests(tests);
+    }
+
+    #[test]
+    fn test_calling_functions_with_wrong_arguments() {
+        let tests = vec![
+            (
+                "func() { 1; }(1);".to_string(),
+                "wrong number of arguments. Expected: 0. Got: 1".to_string(),
+            ),
+            (
+                "func(a) { a; }();".to_string(),
+                "wrong number of arguments. Expected: 1. Got: 0".to_string(),
+            ),
+            (
+                "func(a, b) { a + b; }(1);".to_string(),
+                "wrong number of arguments. Expected: 2. Got: 1".to_string(),
+            ),
+        ];
+
+        for (input, expected_error) in tests {
+            let program = parse(input);
+            let mut comp = Compiler::new();
+            match comp.compile(&program) {
+                Ok(_) => {
+                    let mut vm = VirtualMachine::new(comp.bytecode());
+                    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        vm.run();
+                    }));
+                    assert!(result.is_err(), "expected VM to panic but it did not.");
+
+                    let panic_info = result.unwrap_err();
+                    if let Some(panic_message) = panic_info.downcast_ref::<String>() {
+                        assert_eq!(
+                            panic_message, &expected_error,
+                            "wrong VM panic message. Want: {}. Got: {}",
+                            expected_error, panic_message
+                        );
+                    } else {
+                        panic!("VM panic did not contain a string message.");
+                    }
+                }
+                Err(err) => {
+                    panic!("{:?}", err);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_builtin_functions() {
+        let tests = vec![
+            VmTestCase {
+                input: "len(\"\")".to_string(),
+                expected: Expected::Integer(0),
+            },
+            VmTestCase {
+                input: "len(\"four\")".to_string(),
+                expected: Expected::Integer(4),
+            },
+            VmTestCase {
+                input: "len(\"hello world\")".to_string(),
+                expected: Expected::Integer(11),
+            },
+            VmTestCase {
+                input: "len(1)".to_string(),
+                expected: Expected::Error(
+                    "Argument to `len` not supported. Got: INTEGER".to_string(),
+                ),
+            },
+            VmTestCase {
+                input: "len(\"one\", \"two\")".to_string(),
+                expected: Expected::Error(
+                    "Wrong number of arguments. Got: 2, Expected: 1".to_string(),
+                ),
+            },
+            VmTestCase {
+                input: "len([1, 2, 3])".to_string(),
+                expected: Expected::Integer(3),
+            },
+            VmTestCase {
+                input: "len([])".to_string(),
+                expected: Expected::Integer(0),
+            },
+            VmTestCase {
+                input: "print(\"hello\", \"world!\")".to_string(),
+                expected: Expected::Null,
+            },
+            VmTestCase {
+                input: "first([1, 2, 3])".to_string(),
+                expected: Expected::Integer(1),
+            },
+            VmTestCase {
+                input: "first([])".to_string(),
+                expected: Expected::Null,
+            },
+            VmTestCase {
+                input: "first(1)".to_string(),
+                expected: Expected::Error(
+                    "Argument to `first` must be an Array. Got: INTEGER".to_string(),
+                ),
+            },
+            VmTestCase {
+                input: "last([1, 2, 3])".to_string(),
+                expected: Expected::Integer(3),
+            },
+            VmTestCase {
+                input: "last([])".to_string(),
+                expected: Expected::Null,
+            },
+            VmTestCase {
+                input: "last(1)".to_string(),
+                expected: Expected::Error(
+                    "Argument to `last` must be an Array. Got: INTEGER".to_string(),
+                ),
+            },
+            VmTestCase {
+                input: "rest([1, 2, 3])".to_string(),
+                expected: Expected::IntegerArray(vec![2, 3]),
+            },
+            VmTestCase {
+                input: "rest([])".to_string(),
+                expected: Expected::Null,
+            },
+            VmTestCase {
+                input: "push([], 1)".to_string(),
+                expected: Expected::IntegerArray(vec![1]),
+            },
+            VmTestCase {
+                input: "push(1, 1)".to_string(),
+                expected: Expected::Error(
+                    "Argument to `push` must be an Array. Got: INTEGER".to_string(),
+                ),
+            },
+            VmTestCase {
+                input: "pop([1, 2, 3])".to_string(),
+                expected: Expected::IntegerArray(vec![1, 2]),
+            },
+            VmTestCase {
+                input: "pop([\"one\", \"two\", \"three\"])".to_string(),
+                expected: Expected::StringArray(vec!["one".to_string(), "two".to_string()]),
+            },
+            VmTestCase {
+                input: "pop([])".to_string(),
+                expected: Expected::Null,
+            },
+            VmTestCase {
+                input: "pop([1, 2, 3], \"anything else\")".to_string(),
+                expected: Expected::Error(
+                    "Wrong number of arguments. Got: 2, Expected: 1".to_string(),
+                ),
+            },
+            VmTestCase {
+                input: "split(\"My name is brad\")".to_string(),
+                expected: Expected::Error(
+                    "Wrong number of arguments. Got: 1, Expected: 2".to_string(),
+                ),
+            },
+            VmTestCase {
+                input: "split(\"My name is brad\", \" \")".to_string(),
+                expected: Expected::StringArray(vec![
+                    "My".to_string(),
+                    "name".to_string(),
+                    "is".to_string(),
+                    "brad".to_string(),
+                ]),
+            },
+            VmTestCase {
+                input: "split(\"\", \" \")".to_string(),
+                expected: Expected::StringArray(vec![]),
+            },
+            VmTestCase {
+                input: "join([\"My\", \"name\", \"is\", \"brad\"])".to_string(),
+                expected: Expected::Error(
+                    "Wrong number of arguments. Got: 1, Expected: 2".to_string(),
+                ),
+            },
+            VmTestCase {
+                input: "join([\"My\", \"name\", \"is\", \"brad\"], \", \")".to_string(),
+                expected: Expected::Str("My, name, is, brad".to_string()),
+            },
+            VmTestCase {
+                input: "join(\"My name is brad\", \" \")".to_string(),
+                expected: Expected::Error("First argument to `join` must be an Array".to_string()),
+            },
+            VmTestCase {
+                input: "join(\"\", \" \")".to_string(),
+                expected: Expected::Error("First argument to `join` must be an Array".to_string()),
             },
         ];
 

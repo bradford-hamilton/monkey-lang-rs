@@ -224,6 +224,10 @@ fn b_split(args: Vec<Rc<dyn Object>>) -> Rc<dyn Object> {
             ))
         }
     };
+    if str_arg.value == "" {
+        return Rc::new(Array { elements: vec![] });
+    }
+
     let split_on_arg = match args[1].as_ref().as_any().downcast_ref::<Str>() {
         Some(string) => string,
         None => {
@@ -232,6 +236,7 @@ fn b_split(args: Vec<Rc<dyn Object>>) -> Rc<dyn Object> {
             ))
         }
     };
+
     let split_result = str_arg
         .value
         .split(&split_on_arg.value)
@@ -254,14 +259,21 @@ fn b_join(args: Vec<Rc<dyn Object>>) -> Rc<dyn Object> {
             args.len()
         )));
     }
+
     let array_arg = match args[0].as_ref().as_any().downcast_ref::<Array>() {
         Some(array) => array,
         None => {
             return Rc::new(new_error(
                 "First argument to `join` must be an Array".to_string(),
-            ))
+            ));
         }
     };
+    if array_arg.elements.len() == 0 {
+        return Rc::new(Str {
+            value: "".to_string(),
+        });
+    }
+
     let join_on_arg = match args[1].as_ref().as_any().downcast_ref::<Str>() {
         Some(string) => string,
         None => {
@@ -270,6 +282,7 @@ fn b_join(args: Vec<Rc<dyn Object>>) -> Rc<dyn Object> {
             ))
         }
     };
+
     let mut elements = Vec::new();
     for element in array_arg.elements.iter() {
         match element.as_ref().as_any().downcast_ref::<Str>() {
