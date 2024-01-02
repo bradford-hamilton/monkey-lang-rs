@@ -1,13 +1,10 @@
 use crate::ast::{ArrayLiteral, HashLiteral};
-use crate::builtins::{Builtin, BUILTINS};
+use crate::builtins::{BuiltinObject, BUILTINS};
 use crate::bytecode::{read_uint16, read_uint8, Instructions, Opcode};
 use crate::compiler::Bytecode;
 use crate::frame::Frame;
-use crate::object::{
-    Array, Boolean, Closure, CompiledFunc, Error, HashKey, HashMp, Integer, Null, Object,
-    ObjectType, Str,
-};
-use crate::object::{HashPair, Hashable};
+use crate::object::{ClosureObject, CompiledFuncObject, Object};
+use crate::object::{HashKey, HashPair};
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -20,26 +17,26 @@ const GLOBALS_SIZE: i64 = 65536;
 
 // Defines the virtual machine. It holds the constant pool, instructions, a stack,
 // and an integer (index) that points to the next free slot in the stack.
-pub struct VirtualMachine<'a> {
-    constants: Vec<&'a Rc<dyn Object>>,
-    stack: Vec<Rc<dyn Object>>,
+pub struct VirtualMachine {
+    constants: Vec<Object>,
+    stack: Vec<Object>,
     sp: u64,
-    globals: Vec<Rc<dyn Object>>,
+    globals: Vec<Object>,
     frames: Vec<Frame>,
     frames_index: usize,
 }
 
-impl<'a> VirtualMachine<'a> {
-    pub fn new(bytecode: Bytecode<'a>) -> Self {
-        let main_func = CompiledFunc {
+impl VirtualMachine {
+    pub fn new(bytecode: Bytecode) -> Self {
+        let main_func = CompiledFuncObject {
             instructions: bytecode.instructions,
             num_locals: 0,
             num_params: 0,
         };
-        let main_closure = Rc::new(Closure {
+        let main_closure = ClosureObject {
             func: main_func,
             free: vec![],
-        });
+        };
         let main_frame = Frame::new(main_closure, 0);
         let mut frames = Vec::with_capacity(MAX_FRAMES as usize);
 
@@ -55,7 +52,7 @@ impl<'a> VirtualMachine<'a> {
         }
     }
 
-    pub fn new_with_global_state(bytecode: Bytecode<'a>, state: Vec<Rc<dyn Object>>) -> Self {
+    pub fn new_with_global_state(bytecode: Bytecode, state: Vec<Object>) -> Self {
         let mut vm = VirtualMachine::new(bytecode);
         vm.globals = state;
         vm
@@ -91,11 +88,11 @@ impl<'a> VirtualMachine<'a> {
                 }
 
                 Opcode::OpTrue => {
-                    self.push(Rc::new(Boolean { value: true }));
+                    self.push(Object::Boolean(true));
                 }
 
                 Opcode::OpFalse => {
-                    self.push(Rc::new(Boolean { value: false }));
+                    self.push(Object::Boolean(false));
                 }
 
                 Opcode::OpEqualEqual
@@ -128,13 +125,13 @@ impl<'a> VirtualMachine<'a> {
                     self.current_frame_mut().ip += 2;
 
                     let condition = self.pop();
-                    if !is_truthy(condition) {
+                    if !is_truthy(&condition) {
                         self.current_frame_mut().ip = pos - 1;
                     }
                 }
 
                 Opcode::OpNull => {
-                    self.push(Rc::new(Null {}));
+                    self.push(Object::Null {});
                 }
 
                 Opcode::OpSetGlobal => {
@@ -150,7 +147,7 @@ impl<'a> VirtualMachine<'a> {
                     if global_index >= self.globals.len() {
                         panic!("global index {} is out of bounds", global_index);
                     }
-                    self.push(Rc::clone(&self.globals[global_index]));
+                    self.push(&self.globals[global_index]);
                 }
 
                 Opcode::OpArray => {
@@ -199,7 +196,7 @@ impl<'a> VirtualMachine<'a> {
                     let frame = self.pop_frame();
 
                     self.sp = frame.base_pointer as u64 - 1;
-                    self.push(Rc::new(Null {}));
+                    self.push(Object::Null {});
                 }
 
                 Opcode::OpSetLocal => {
@@ -283,55 +280,50 @@ impl<'a> VirtualMachine<'a> {
         &self.frames[self.frames_index]
     }
 
-    pub fn last_popped_stack_element(&self) -> Rc<dyn Object> {
+    pub fn last_popped_stack_element(&self) -> Object {
         self.stack[self.sp as usize].clone()
     }
 
-    fn push(&mut self, obj: Rc<dyn Object>) {
+    fn push(&mut self, obj: Object) {
         if self.sp >= STACK_SIZE as u64 {
             panic!("stack overflow");
         }
 
         if self.sp as usize >= self.stack.len() {
-            self.stack.resize(self.sp as usize + 1, Rc::new(Null {}));
+            self.stack.resize(self.sp as usize + 1, Object::Null);
         }
 
         self.stack[self.sp as usize] = obj;
         self.sp += 1;
     }
 
-    fn pop(&mut self) -> Rc<dyn Object> {
+    fn pop(&mut self) -> Object {
         let obj = self.stack[self.sp as usize - 1].clone();
         self.sp -= 1;
         obj
     }
 
     fn execute_call(&mut self, num_args: usize) {
-        let callee = Rc::clone(&self.stack[self.sp as usize - 1 - num_args]);
+        let callee = &self.stack[self.sp as usize - 1 - num_args];
 
-        if let Some(closure) = callee.as_any().downcast_ref::<Closure>() {
-            self.call_closure(Rc::new(closure.clone()), num_args);
-        } else if let Some(builtin) = callee.as_any().downcast_ref::<Builtin>() {
-            self.call_builtin(Rc::new(builtin.clone()), num_args);
-        } else {
-            panic!("calling non-function and non-builtin");
+        match callee {
+            Object::Closure(closure) => self.call_closure(closure, num_args),
+            Object::Builtin(builtin) => self.call_builtin(builtin, num_args),
+            _ => panic!("calling non-function and non-builtin"),
         }
     }
 
-    fn execute_binary_integer_operation(
-        &mut self,
-        op: Opcode,
-        left: Rc<dyn Object>,
-        right: Rc<dyn Object>,
-    ) {
-        let left_value = match left.as_any().downcast_ref::<Integer>() {
-            Some(integer) => integer.value,
-            None => panic!("left operand is not an integer"),
+    fn execute_binary_integer_operation(&mut self, op: Opcode, left: Object, right: Object) {
+        let left_value = if let Object::Integer(value) = left {
+            value
+        } else {
+            panic!("left operand is not an integer");
         };
 
-        let right_value = match right.as_any().downcast_ref::<Integer>() {
-            Some(integer) => integer.value,
-            None => panic!("right operand is not an integer"),
+        let right_value = if let Object::Integer(value) = right {
+            value
+        } else {
+            panic!("right operand is not an integer");
         };
 
         let result = match op {
@@ -343,51 +335,43 @@ impl<'a> VirtualMachine<'a> {
             _ => panic!("unknown integer operator: {:?}", op),
         };
 
-        self.push(Rc::new(Integer { value: result }));
+        self.push(Object::Integer(result));
     }
 
-    fn execute_binary_string_operation(
-        &mut self,
-        op: Opcode,
-        left: Rc<dyn Object>,
-        right: Rc<dyn Object>,
-    ) {
+    fn execute_binary_string_operation(&mut self, op: Opcode, left: Object, right: Object) {
         if op != Opcode::OpAdd {
-            panic!("unknown String operator: {:?}", op);
+            panic!("unknown string operator: {:?}", op);
         }
 
-        let left_value = match left.as_any().downcast_ref::<Str>() {
-            Some(string) => &string.value,
-            None => panic!("left operand is not a string"),
+        let left_value = if let Object::Str(value) = left {
+            value
+        } else {
+            panic!("left operand is not a string");
         };
 
-        let right_value = match right.as_any().downcast_ref::<Str>() {
-            Some(string) => &string.value,
-            None => panic!("right operand is not a string"),
+        let right_value = if let Object::Str(value) = right {
+            value
+        } else {
+            panic!("right operand is not a string");
         };
 
-        self.push(Rc::new(Str {
-            value: left_value.to_owned() + right_value,
-        }));
+        self.push(Object::Str(left_value + &right_value));
     }
 
     fn execute_binary_operation(&mut self, op: Opcode) {
         let right = self.pop();
         let left = self.pop();
 
-        let left_type = left.object_type();
-        let right_type = right.object_type();
-
-        match (&left_type, &right_type) {
-            (ObjectType::Integer, ObjectType::Integer) => {
+        match (&left, &right) {
+            (Object::Integer(_), Object::Integer(_)) => {
                 self.execute_binary_integer_operation(op, left, right)
             }
-            (ObjectType::String, ObjectType::String) => {
+            (Object::Str(_), Object::Str(_)) => {
                 self.execute_binary_string_operation(op, left, right)
             }
             _ => panic!(
-                "unsupported types for binary operation: {:?} {:?}",
-                left_type, right_type
+                "unsupported types for binary operation: {:?} and {:?}",
+                left, right
             ),
         }
     }
@@ -395,53 +379,42 @@ impl<'a> VirtualMachine<'a> {
     fn execute_minus_operator(&mut self) {
         let operand = self.pop();
 
-        match operand.as_any().downcast_ref::<Integer>() {
-            Some(integer) => {
-                self.push(Rc::new(Integer {
-                    value: -integer.value,
-                }));
+        match operand {
+            Object::Integer(value) => {
+                self.push(Object::Integer(-value));
             }
-            None => panic!("unsupported type for negation: {}", operand.object_type()),
+            _ => panic!("unsupported type for negation: {}", operand),
         }
     }
 
     fn execute_bang_operator(&mut self) {
         let operand = self.pop();
-        let result = match operand.as_ref().object_type() {
-            ObjectType::Boolean => {
-                let value = operand
-                    .as_ref()
-                    .as_any()
-                    .downcast_ref::<Boolean>()
-                    .unwrap()
-                    .value;
-                Rc::new(Boolean { value: !value })
-            }
-            ObjectType::Null => Rc::new(Boolean { value: true }),
-            _ => Rc::new(Boolean { value: false }),
+        let result = match operand {
+            Object::Boolean(value) => Object::Boolean(!value),
+            Object::Null => Object::Boolean(true),
+            _ => Object::Boolean(false),
         };
-
         self.push(result);
     }
 
-    fn execute_integer_comparison(
-        &mut self,
-        op: Opcode,
-        left: Rc<dyn Object>,
-        right: Rc<dyn Object>,
-    ) {
-        let left_value = left.as_any().downcast_ref::<Integer>().unwrap().value;
-        let right_value = right.as_any().downcast_ref::<Integer>().unwrap().value;
+    fn execute_integer_comparison(&mut self, op: Opcode, left: Object, right: Object) {
+        let left_value = if let Object::Integer(left_value) = left {
+            left_value
+        } else {
+            panic!("left operand is not an integer");
+        };
+
+        let right_value = if let Object::Integer(right_value) = right {
+            right_value
+        } else {
+            panic!("right operand is not an integer");
+        };
 
         match op {
-            Opcode::OpEqualEqual => {
-                self.push(native_bool_to_boolean_obj(right_value == left_value));
-            }
-            Opcode::OpNotEqual => self.push(native_bool_to_boolean_obj(right_value != left_value)),
-            Opcode::OpGreater => self.push(native_bool_to_boolean_obj(left_value > right_value)),
-            Opcode::OpGreaterEqual => {
-                self.push(native_bool_to_boolean_obj(left_value >= right_value));
-            }
+            Opcode::OpEqualEqual => self.push(Object::Boolean(right_value == left_value)),
+            Opcode::OpNotEqual => self.push(Object::Boolean(right_value != left_value)),
+            Opcode::OpGreater => self.push(Object::Boolean(left_value > right_value)),
+            Opcode::OpGreaterEqual => self.push(Object::Boolean(left_value >= right_value)),
             _ => panic!("unknown operator: {:?}", op),
         }
     }
@@ -450,22 +423,19 @@ impl<'a> VirtualMachine<'a> {
         let right = self.pop();
         let left = self.pop();
 
-        if left.object_type() == ObjectType::Integer || right.object_type() == ObjectType::Integer {
-            self.execute_integer_comparison(op, left, right);
-        } else {
-            match op {
+        match (left, right) {
+            (Object::Integer(left_value), Object::Integer(right_value)) => {
+                self.execute_integer_comparison(op, left_value, right_value);
+            }
+            _ => match op {
                 Opcode::OpEqualEqual => {
-                    self.push(native_bool_to_boolean_obj(
-                        left.inspect() == right.inspect(),
-                    ));
+                    self.push(Object::Boolean(left == right));
                 }
                 Opcode::OpNotEqual => {
-                    self.push(native_bool_to_boolean_obj(
-                        left.inspect() != right.inspect(),
-                    ));
+                    self.push(Object::Boolean(left != right));
                 }
                 _ => panic!("unknown operator: {:?}", op),
-            }
+            },
         }
     }
 
@@ -473,216 +443,179 @@ impl<'a> VirtualMachine<'a> {
         let right = self.pop();
         let left = self.pop();
 
+        let left_bool = coerce_obj_to_native_bool(&left);
+        let right_bool = coerce_obj_to_native_bool(&right);
+
         let result = match op {
-            Opcode::OpAnd => coerce_obj_to_native_bool(left) && coerce_obj_to_native_bool(right),
-            Opcode::OpOr => coerce_obj_to_native_bool(left) || coerce_obj_to_native_bool(right),
+            Opcode::OpAnd => left_bool && right_bool,
+            Opcode::OpOr => left_bool || right_bool,
             _ => panic!("unknown logical operator: {:?}", op),
         };
 
-        self.push(native_bool_to_boolean_obj(result));
+        self.push(Object::Boolean(result));
     }
 
     // TODO:
     // func (vm *VM) executePostfixOperator(op code.Opcode, ins code.Instructions, ip int)
 
-    fn build_array(&self, start_index: usize, end_index: usize) -> Rc<dyn Object> {
-        let elements = self.stack[start_index..end_index].to_vec();
+    fn build_array(&self, start_index: usize, end_index: usize) -> Object {
+        let elements = self.stack[start_index..end_index]
+            .iter()
+            .cloned()
+            .collect::<Vec<Object>>();
 
-        Rc::new(Array { elements })
+        Object::Array(elements)
     }
 
-    fn build_hash(&self, start_index: usize, end_index: usize) -> Rc<dyn Object> {
-        let mut pairs: HashMap<HashKey, _> = HashMap::new();
+    fn build_hash(&self, start_index: usize, end_index: usize) -> Object {
+        let mut pairs: HashMap<HashKey, HashPair> = HashMap::new();
 
         for i in (start_index..end_index).step_by(2) {
-            let key = Rc::clone(&self.stack[i]);
-            let value = Rc::clone(&self.stack[i + 1]);
+            let key = &self.stack[i];
+            let value = self.stack[i + 1].clone();
 
-            let hash_key: HashKey = if let Some(key) = key.as_any().downcast_ref::<Str>() {
-                key.hash_key()
-            } else if let Some(key) = key.as_any().downcast_ref::<Boolean>() {
-                key.hash_key()
-            } else if let Some(key) = key.as_any().downcast_ref::<Integer>() {
-                key.hash_key()
-            } else {
-                panic!("unusable as a hash key: {}", key.inspect());
+            let hash_key = match key {
+                Object::Str(string_obj) => string_obj.hash_key(),
+                Object::Boolean(boolean_obj) => boolean_obj.hash_key(),
+                Object::Integer(integer_obj) => integer_obj.hash_key(),
+                _ => panic!("unusable as a hash key: {}", key),
             };
 
-            pairs.insert(hash_key, HashPair { key, value });
+            pairs.insert(
+                hash_key,
+                HashPair {
+                    key: key.clone(),
+                    value,
+                },
+            );
         }
 
-        Rc::new(HashMp { pairs })
+        Object::Hash(pairs)
     }
 
-    fn execute_index_expr(&mut self, left: Rc<dyn Object>, index: Rc<dyn Object>) {
-        match left.object_type() {
-            ObjectType::Array => {
-                if let Some(index_obj) = index.as_any().downcast_ref::<Integer>() {
-                    self.execute_array_index(left, Rc::new(index_obj.clone()));
+    fn execute_index_expr(&mut self, left: Object, index: Object) {
+        match left {
+            Object::Array(array_elements) => {
+                if let Object::Integer(index_value) = index {
+                    self.execute_array_index(array_elements, index_value);
                 } else {
-                    panic!(
-                        "index operator not supported for type: {}",
-                        index.object_type()
-                    );
+                    panic!("index operator not supported for non-integer indices");
                 }
             }
-            ObjectType::Hash => self.execute_hash_index(left, index),
-            _ => panic!(
-                "index operator not supported for type: {}",
-                left.object_type()
-            ),
+            Object::Hash(hash_map) => self.execute_hash_index(hash_map, index),
+            _ => panic!("index operator not supported for type: {:?}", left),
         }
     }
 
-    fn execute_array_index(&mut self, array: Rc<dyn Object>, index: Rc<dyn Object>) {
-        let array_obj = array.as_any().downcast_ref::<Array>().unwrap();
-        let index_obj = index.as_any().downcast_ref::<Integer>().unwrap();
+    fn execute_array_index(&mut self, array_elements: Vec<Object>, index_value: i64) {
+        let max = array_elements.len() as i64 - 1;
 
-        let i = index_obj.value;
-        let max = array_obj.elements.len() as i64 - 1;
-
-        if i < 0 || i > max {
-            self.push(Rc::new(Null {}));
+        if index_value < 0 || index_value > max {
+            self.push(Object::Null);
         } else {
-            let element = Rc::clone(&array_obj.elements[i as usize]);
+            let element = array_elements[index_value as usize].clone();
             self.push(element);
         }
     }
 
-    fn execute_hash_index(&mut self, hash: Rc<dyn Object>, index: Rc<dyn Object>) {
-        let hash_object = hash.as_any().downcast_ref::<HashMp>().unwrap();
-        let hash_key = if let Some(key) = index.as_any().downcast_ref::<Str>() {
-            key.hash_key()
-        } else if let Some(key) = index.as_any().downcast_ref::<Boolean>() {
-            key.hash_key()
-        } else if let Some(key) = index.as_any().downcast_ref::<Integer>() {
-            key.hash_key()
-        } else {
-            panic!("unusable as a hash key: {}", index.inspect());
-        };
+    fn execute_hash_index(&mut self, hash: Object, index: Object) {
+        if let Object::Hash(hash_object) = hash {
+            let hash_key = match index {
+                Object::Str(ref string) => string.hash_key(),
+                Object::Boolean(ref boolean) => boolean.hash_key(),
+                Object::Integer(ref integer) => integer.hash_key(),
+                _ => panic!("unusable as a hash key: {:?}", index),
+            };
 
-        match hash_object.pairs.get(&hash_key) {
-            Some(pair) => {
-                let value = Rc::clone(&pair.value);
-                self.push(value)
+            match hash_object.pairs.get(&hash_key) {
+                Some(pair) => self.push(pair.value.clone()),
+                None => self.push(Object::Null),
             }
-            None => self.push(Rc::new(Null {})),
+        } else {
+            panic!("expected hash for execute_hash_index, got {:?}", hash);
         }
     }
 
-    fn call_closure(&mut self, closure: Rc<dyn Object>, num_args: usize) {
-        let closure = closure.as_any().downcast_ref::<Closure>().unwrap();
-        if num_args != closure.func.num_params {
-            panic!(
-                "wrong number of arguments. Expected: {}. Got: {}",
-                closure.func.num_params, num_args
-            );
+    fn call_closure(&mut self, closure: Object, num_args: usize) {
+        if let Object::Closure(ref cl) = closure {
+            if num_args != cl.func.num_params {
+                panic!(
+                    "wrong number of arguments. Expected: {}. Got: {}",
+                    cl.func.num_params, num_args
+                );
+            }
+            let frame = Frame::new(cl.clone(), self.sp as i64 - num_args as i64);
+            self.push_frame(frame);
+            self.sp = frame.base_pointer as u64 + cl.func.num_locals as u64;
+        } else {
+            panic!("expected closure for call_closure, got {:?}", closure);
         }
-        let closure_num_locals = closure.func.num_locals;
-        let cl = Rc::new(Closure {
-            func: closure.func.clone(),
-            free: closure.free.clone(),
-        });
-        let frame = Frame::new(cl, self.sp as i64 - num_args as i64);
-        let frame_bp = frame.base_pointer;
-
-        self.push_frame(frame);
-        self.sp = frame_bp as u64 + closure_num_locals as u64;
     }
 
     fn push_closure(&mut self, const_index: usize, num_free: usize) {
-        let constant = &self.constants[const_index];
-        let function = constant.as_any().downcast_ref::<CompiledFunc>().unwrap();
-        let mut free = Vec::with_capacity(num_free);
-
-        for i in 0..num_free {
-            let free_obj = Rc::clone(&self.stack[self.sp as usize - num_free + i]);
-            free.push(free_obj);
+        if let Object::CompiledFunc(ref function) = self.constants[const_index] {
+            let mut free = Vec::with_capacity(num_free);
+            for i in 0..num_free {
+                free.push(Rc::clone(&self.stack[self.sp as usize - num_free + i]));
+            }
+            self.sp -= num_free as u64;
+            self.push(Object::Closure(ClosureObject {
+                func: function.clone(),
+                free,
+            }));
+        } else {
+            panic!(
+                "expected compiled function at constants[{}], got {:?}",
+                const_index, self.constants[const_index]
+            );
         }
-
-        self.sp -= num_free as u64;
-
-        let closure = Rc::new(Closure {
-            func: function.clone(),
-            free,
-        });
-
-        self.push(closure);
     }
 
-    fn call_builtin(&mut self, builtin: Rc<dyn Object>, num_args: usize) {
-        let builtin_func = builtin.as_any().downcast_ref::<Builtin>().unwrap();
-        let args: Vec<Rc<dyn Object>> =
-            self.stack[self.sp as usize - num_args..self.sp as usize].to_vec();
-        let result = builtin_func.call(args);
+    fn call_builtin(&mut self, builtin: Object, num_args: usize) {
+        if let Object::Builtin(ref builtin_func) = builtin {
+            let args_start = self.sp as usize - num_args;
+            let args = self.stack[args_start..self.sp as usize]
+                .iter()
+                .cloned()
+                .collect::<Vec<_>>();
+            let result = builtin_func.call(args);
 
-        self.sp -= num_args as u64 - 1;
+            self.sp -= num_args as u64 + 1;
 
-        if result.as_any().is::<Null>() {
-            self.push(Rc::new(Null {}));
+            // Push the result or Null if no result is returned
+            match result {
+                Object::Null => self.push(Object::Null),
+                _ => self.push(result),
+            }
         } else {
-            self.push(result);
+            panic!("expected builtin for call_builtin, got {:?}", builtin);
         }
     }
 }
 
-fn is_truthy(obj: Rc<dyn Object>) -> bool {
-    match obj.as_ref() {
-        obj_ref if obj_ref.as_any().is::<Boolean>() => {
-            obj_ref.as_any().downcast_ref::<Boolean>().unwrap().value
-        }
-        obj_ref if obj_ref.as_any().is::<Null>() => false,
+fn is_truthy(obj: &Object) -> bool {
+    match obj {
+        Object::Boolean(value) => *value,
+        Object::Null => false,
         _ => true,
     }
 }
 
-fn native_bool_to_boolean_obj(input: bool) -> Rc<dyn Object> {
-    if input {
-        Rc::new(Boolean { value: true })
-    } else {
-        Rc::new(Boolean { value: false })
-    }
+fn native_bool_to_boolean_obj(input: bool) -> Object {
+    Object::Boolean(input)
 }
 
-// Coerce the different object types to booleans for truthy/falsey values.
-fn coerce_obj_to_native_bool(object: Rc<dyn Object>) -> bool {
-    // Check for Boolean type
-    if object.object_type() == ObjectType::Boolean {
-        if let Some(boolean_obj) = object.as_any().downcast_ref::<Boolean>() {
-            return boolean_obj.value;
-        }
+fn coerce_obj_to_native_bool(object: &Object) -> bool {
+    match object {
+        Object::Boolean(value) => *value,
+        Object::Str(string_obj) => !string_obj.value.is_empty(),
+        Object::Integer(integer_obj) => integer_obj.value != 0,
+        Object::Array(array_obj) => !array_obj.elements.is_empty(),
+        Object::Hash(hash_obj) => !hash_obj.pairs.is_empty(),
+        Object::Null => false,
+        // Default case for other object types
+        _ => true,
     }
-    // Check for String type
-    else if object.object_type() == ObjectType::String {
-        if let Some(string_obj) = object.as_any().downcast_ref::<Str>() {
-            return !string_obj.value.is_empty();
-        }
-    }
-    // Check for Integer type
-    else if object.object_type() == ObjectType::Integer {
-        if let Some(integer_obj) = object.as_any().downcast_ref::<Integer>() {
-            return integer_obj.value != 0;
-        }
-    }
-    // Check for Array type
-    else if object.object_type() == ObjectType::Array {
-        if let Some(array_obj) = object.as_any().downcast_ref::<ArrayLiteral>() {
-            return !array_obj.elements.is_empty();
-        }
-    }
-    // Check for Hash type
-    else if object.object_type() == ObjectType::Hash {
-        if let Some(hash_obj) = object.as_any().downcast_ref::<HashLiteral>() {
-            return !hash_obj.pairs.is_empty();
-        }
-    }
-    // Check for Null type
-    else if object.object_type() == ObjectType::Null {
-        return false;
-    }
-
-    // Default case for other object types
-    true
 }
 
 #[cfg(test)]
@@ -729,100 +662,89 @@ mod tests {
         Error(String),
     }
 
-    fn test_expected_object(expected: Expected, actual: Rc<dyn Object>) {
+    fn test_expected_object(expected: Expected, actual: Object) {
         match expected {
-            Expected::Integer(expected) => {
-                test_integer_object(expected, &actual);
-            }
-            Expected::Boolean(expected) => {
-                test_boolean_object(expected, &actual);
-            }
-            Expected::Null => {
-                assert!(actual.as_any().is::<Null>());
-            }
-            Expected::Str(expected) => {
-                test_string_object(expected, &actual);
-            }
+            Expected::Integer(expected) => test_integer_object(expected, &actual),
+            Expected::Boolean(expected) => test_boolean_object(expected, &actual),
+            Expected::Null => match actual {
+                Object::Null => (),
+                _ => panic!("Expected Null, got {:?}", actual),
+            },
+            Expected::Str(expected) => test_string_object(expected, &actual),
             Expected::IntegerArray(expected) => {
-                let array = actual.as_any().downcast_ref::<Array>().unwrap();
-                assert_eq!(array.elements.len(), expected.len());
-                for (expected_elem, actual_elem) in expected.iter().zip(array.elements.iter()) {
-                    test_integer_object(*expected_elem, actual_elem);
+                if let Object::Array(array_elements) = actual {
+                    assert_eq!(array_elements.len(), expected.len());
+                    for (expected_elem, actual_elem) in expected.iter().zip(array_elements.iter()) {
+                        test_integer_object(*expected_elem, actual_elem);
+                    }
+                } else {
+                    panic!("Expected an Integer Array, got {:?}", actual);
                 }
             }
             Expected::StringArray(expected) => {
-                match actual.as_any().downcast_ref::<Array>() {
-                    Some(array) => {
-                        assert_eq!(array.elements.len(), expected.len());
-                        for (expected_elem, actual_elem) in
-                            expected.iter().zip(array.elements.iter())
-                        {
-                            let string_obj = actual_elem.as_any().downcast_ref::<Str>().unwrap();
-                            assert_eq!(&string_obj.value, expected_elem);
-                        }
+                if let Object::Array(array_elements) = actual {
+                    assert_eq!(array_elements.len(), expected.len());
+                    for (expected_elem, actual_elem) in expected.iter().zip(array_elements.iter()) {
+                        test_string_object(expected_elem.clone(), actual_elem);
                     }
-                    None => {
-                        // Handle case where actual is not an Array, but a Str
-                        if let Some(string_obj) = actual.as_any().downcast_ref::<Str>() {
-                            // Expected string array should contain only one element in this case
-                            assert_eq!(&string_obj.value, &expected[0]);
-                        } else {
-                            panic!(
-                                "Expected a String or String Array, found: {:?}",
-                                actual.inspect()
-                            );
-                        }
-                    }
+                } else {
+                    panic!("Expected a String Array, got {:?}", actual);
                 }
             }
             Expected::HashMap(expected) => {
-                let hash = actual.as_any().downcast_ref::<HashMp>().unwrap();
-                assert_eq!(hash.pairs.len(), expected.len());
-                for (expected_key, expected_value) in expected {
-                    let pair = hash.pairs.get(&expected_key).unwrap();
-                    test_integer_object(expected_value, &pair.value);
+                if let Object::Hash(hash) = actual {
+                    assert_eq!(hash.pairs.len(), expected.len());
+                    for (expected_key, expected_value) in expected {
+                        let pair = hash.pairs.get(&expected_key).unwrap();
+                        test_integer_object(expected_value, &pair.value);
+                    }
+                } else {
+                    panic!("Expected a HashMap, got {:?}", actual);
                 }
             }
             Expected::Error(expected_message) => {
-                let err_obj = actual.as_any().downcast_ref::<Error>().unwrap();
-                assert_eq!(err_obj.message, expected_message);
+                if let Object::Error(err_obj) = actual {
+                    assert_eq!(err_obj.message, expected_message);
+                } else {
+                    panic!("Expected an error, got {:?}", actual);
+                }
             }
         }
     }
 
-    fn test_integer_object(expected: i64, actual: &Rc<dyn Object>) {
-        if let Some(result) = actual.as_any().downcast_ref::<Integer>() {
+    fn test_integer_object(expected: i64, actual: &Object) {
+        if let Object::Integer(result) = actual {
             assert_eq!(
                 result.value, expected,
                 "object has wrong value. Expected: {}. Got: {}",
                 expected, result.value
             );
         } else {
-            panic!("object is not an Integer. Got: {:?}", actual.inspect());
+            panic!("object is not an Integer. Got: {:?}", actual);
         }
     }
 
-    fn test_boolean_object(expected: bool, actual: &Rc<dyn Object>) {
-        if let Some(result) = actual.as_any().downcast_ref::<Boolean>() {
+    fn test_boolean_object(expected: bool, actual: &Object) {
+        if let Object::Boolean(result) = actual {
             assert_eq!(
                 result.value, expected,
                 "object has wrong value. Expected: {}, Got: {}",
                 expected, result.value
             );
         } else {
-            panic!("object is not Boolean. Got: {:?}", actual.inspect());
+            panic!("object is not Boolean. Got: {:?}", actual);
         }
     }
 
-    fn test_string_object(expected: String, actual: &Rc<dyn Object>) {
-        if let Some(result) = actual.as_any().downcast_ref::<Str>() {
+    fn test_string_object(expected: String, actual: &Object) {
+        if let Object::Str(result) = actual {
             assert_eq!(
-                result.value, expected,
+                &result.value, &expected,
                 "Object has wrong value. Expected: {:?}, Got: {:?}",
                 expected, result.value
             );
         } else {
-            panic!("Object is not a String. Got: {:?}", actual.inspect());
+            panic!("Object is not a String. Got: {:?}", actual);
         }
     }
 
@@ -1212,12 +1134,12 @@ mod tests {
         let empty_hash = HashMap::new();
 
         let mut hash_one = HashMap::new();
-        hash_one.insert(Integer { value: 1 }.hash_key(), 2);
-        hash_one.insert(Integer { value: 2 }.hash_key(), 3);
+        hash_one.insert(Object::Integer(1).hash_key(), 2);
+        hash_one.insert(Object::Integer(2).hash_key(), 3);
 
         let mut hash_two = HashMap::new();
-        hash_two.insert(Integer { value: 2 }.hash_key(), 4);
-        hash_two.insert(Integer { value: 6 }.hash_key(), 16);
+        hash_two.insert(Object::Integer(2).hash_key(), 4);
+        hash_two.insert(Object::Integer(6).hash_key(), 16);
 
         let tests = vec![
             VmTestCase {
@@ -1242,8 +1164,8 @@ mod tests {
         use std::collections::HashMap;
 
         let mut hash_one = HashMap::new();
-        hash_one.insert(Integer { value: 1 }.hash_key(), 1);
-        hash_one.insert(Integer { value: 2 }.hash_key(), 2);
+        hash_one.insert(Object::Integer(1).hash_key(), 1);
+        hash_one.insert(Object::Integer(2).hash_key(), 2);
 
         let tests = vec![
             VmTestCase {

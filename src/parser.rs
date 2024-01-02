@@ -1908,10 +1908,10 @@ mod tests {
     #[test]
     fn test_parsing_hash_literals_string_keys() {
         let input = "{\"one\": 1, \"two\": 2, \"three\": 3}".to_string();
-        let lexer = Lexer::new(input); // Assuming you have a lexer
-        let mut parser = Parser::new(lexer); // Assuming you have a parser
-        let program = parser.parse_program(); // Parse the program
-                                              // Assuming a function to check for parser errors
+        let lexer = Lexer::new(input);
+        let mut parser = Parser::new(lexer);
+        let program = parser.parse_program();
+
         check_parser_errors(&parser);
 
         let stmt = &program.statements[0];

@@ -1,125 +1,130 @@
-use crate::builtins::Builtin;
+use crate::builtins::BuiltinObject;
 use crate::environment::Environment;
 use crate::{
     ast::{BlockStatement, Identifier, Node},
     bytecode,
 };
-use std::any::Any;
 use std::cell::RefCell;
+use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
-use std::fmt::Display;
+use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 
-/// Object represents monkey's object system. Every value in monkey-lang
-/// must implement this interface.
-pub trait Object {
-    fn object_type(&self) -> ObjectType;
-    fn inspect(&self) -> String;
-    fn as_any(&self) -> &dyn Any;
-}
-
-/// Represents the different available object types in monkey-lang.
-#[derive(Hash, PartialEq, Eq, Debug)]
-pub enum ObjectType {
-    Integer,
-    Boolean,
-    Null,
-    ReturnValue,
-    Error,
-    Function,
-    String,
-    Builtin,
-    Array,
-    Hash,
-    CompiledFunction,
-    Closure,
-}
-
-impl Display for ObjectType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let type_str = match self {
-            ObjectType::Integer => "INTEGER",
-            ObjectType::Boolean => "BOOLEAN",
-            ObjectType::Null => "NULL",
-            ObjectType::ReturnValue => "RETURN_VALUE",
-            ObjectType::Error => "ERROR",
-            ObjectType::Function => "FUNCTION",
-            ObjectType::String => "STRING",
-            ObjectType::Builtin => "BUILTIN",
-            ObjectType::Array => "ARRAY",
-            ObjectType::Hash => "HASH",
-            ObjectType::CompiledFunction => "COMPILED_FUNCTION",
-            ObjectType::Closure => "CLOSURE",
-        };
-        write!(f, "{}", type_str)
-    }
-}
-
 #[derive(Clone)]
-pub struct Integer {
-    pub value: i64,
+pub enum Object<'a> {
+    Integer(i64),
+    Boolean(bool),
+    Str(String),
+    Array(Vec<&'a Object<'a>>),
+    Hash(&'a HashObject<'a>),
+    Function(&'a FunctionObject<'a>),
+    Builtin(&'a BuiltinObject<'a>),
+    Null,
+    ReturnValue(&'a Object<'a>),
+    Error(String),
+    CompiledFunc(&'a CompiledFuncObject),
+    Closure(&'a ClosureObject<'a>),
 }
 
-impl Object for Integer {
-    fn object_type(&self) -> ObjectType {
-        ObjectType::Integer
+impl<'a> PartialEq for Object<'a> {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Object::Integer(a), Object::Integer(b)) => a == b,
+            (Object::Boolean(a), Object::Boolean(b)) => a == b,
+            (Object::Str(a), Object::Str(b)) => a == b,
+            (Object::Array(a), Object::Array(b)) => a == b,
+            (Object::Hash(a), Object::Hash(b)) => std::ptr::eq(*a, *b),
+            (Object::Function(a), Object::Function(b)) => std::ptr::eq(*a, *b),
+            (Object::Builtin(a), Object::Builtin(b)) => a == b,
+            (Object::Null, Object::Null) => true,
+            (Object::ReturnValue(a), Object::ReturnValue(b)) => a == b,
+            (Object::Error(a), Object::Error(b)) => a == b,
+            (Object::CompiledFunc(a), Object::CompiledFunc(b)) => std::ptr::eq(*a, *b),
+            (Object::Closure(a), Object::Closure(b)) => std::ptr::eq(*a, *b),
+            _ => false,
+        }
     }
-    fn inspect(&self) -> String {
-        self.value.to_string()
+}
+
+impl<'a> Eq for Object<'a> {}
+
+impl<'a> Hash for Object<'a> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        match self {
+            Object::Integer(value) => value.hash(state),
+            Object::Boolean(value) => value.hash(state),
+            Object::Str(value) => value.hash(state),
+            Object::Array(elements) => {
+                for elem in elements {
+                    std::ptr::hash(*elem, state);
+                }
+            }
+            Object::Hash(value) => std::ptr::hash(*value, state),
+            Object::Function(value) => std::ptr::hash(*value, state),
+            Object::Builtin(value) => {
+                let mut hasher = DefaultHasher::new();
+                value.hash(&mut hasher);
+                hasher.finish().hash(state);
+            }
+            Object::Null => 0.hash(state),
+            Object::ReturnValue(value) => std::ptr::hash(*value, state),
+            Object::Error(value) => value.hash(state),
+            Object::CompiledFunc(value) => std::ptr::hash(*value, state),
+            Object::Closure(value) => std::ptr::hash(*value, state),
+        }
     }
-    fn as_any(&self) -> &dyn Any {
-        self
+}
+
+impl<'a> Object<'a> {
+    pub fn object_type(&self) -> &'static str {
+        match self {
+            Object::Integer(_) => "INTEGER",
+            Object::Boolean(_) => "BOOLEAN",
+            Object::Str(_) => "STRING",
+            Object::Array(_) => "ARRAY",
+            Object::Hash(_) => "HASH",
+            Object::Function(_) => "FUNCTION",
+            Object::Builtin(_) => "BUILTIN",
+            Object::Null => "NULL",
+            Object::ReturnValue(_) => "RETURN_VALUE",
+            Object::Error(_) => "ERROR",
+            Object::CompiledFunc(_) => "COMPILED_FUNCTION",
+            Object::Closure(_) => "CLOSURE",
+        }
+    }
+
+    // TODO
+    pub fn inspect(&self) -> String {
+        "TODO".to_string()
+    }
+}
+
+impl<'a> fmt::Display for Object<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Object::Integer(value) => write!(f, "{}", value),
+            Object::Boolean(value) => write!(f, "{}", value),
+            Object::Str(value) => write!(f, "{}", value),
+            Object::Array(elements) => {
+                let elems: Vec<String> = elements.iter().map(|e| e.to_string()).collect();
+                write!(f, "[{}]", elems.join(", "))
+            }
+            Object::Hash(hash_object) => {
+                write!(f, "{}", hash_object)
+            }
+            Object::Function(_) => write!(f, "FunctionObject"),
+            Object::Builtin(_) => write!(f, "BuiltinFunction"),
+            Object::Null => write!(f, "null"),
+            Object::ReturnValue(value) => write!(f, "{}", value),
+            Object::Error(message) => write!(f, "Error: {}", message),
+            Object::CompiledFunc(ptr) => write!(f, "Closure[{:p}]", ptr),
+            Object::Closure(ptr) => write!(f, "Closure[{:p}]", ptr),
+        }
     }
 }
 
 pub struct Null {}
-
-impl Object for Null {
-    fn object_type(&self) -> ObjectType {
-        ObjectType::Null
-    }
-    fn inspect(&self) -> String {
-        "null".to_string()
-    }
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
-
-#[derive(Clone)]
-pub struct Array {
-    pub elements: Vec<Rc<dyn Object>>,
-}
-
-impl Object for Array {
-    fn object_type(&self) -> ObjectType {
-        ObjectType::Array
-    }
-    fn inspect(&self) -> String {
-        let elements_str: Vec<String> = self.elements.iter().map(|e| e.inspect()).collect();
-        format!("[{}]", elements_str.join(", "))
-    }
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
-
-pub struct Boolean {
-    pub value: bool,
-}
-
-impl Object for Boolean {
-    fn object_type(&self) -> ObjectType {
-        ObjectType::Boolean
-    }
-    fn inspect(&self) -> String {
-        self.value.to_string()
-    }
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
 
 /// CompiledFunction holds the instructions we get from the compilation of a function
 /// literal and is an object::Object, which means we can add it as a constant to our
@@ -127,201 +132,98 @@ impl Object for Boolean {
 /// to the VM to allocate the correct amount of stack space ("hole") to save the local
 /// bindings
 // TODO: check back in on this comment after implementing.
-#[derive(Clone)]
-pub struct CompiledFunc {
+pub struct CompiledFuncObject {
     pub instructions: bytecode::Instructions,
     pub num_locals: usize,
     pub num_params: usize,
 }
 
-impl Object for CompiledFunc {
-    fn object_type(&self) -> ObjectType {
-        ObjectType::CompiledFunction
-    }
-    fn inspect(&self) -> String {
-        format!("CompiledFunction[{:p}]", self)
-    }
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
-
-#[derive(Clone)]
-pub struct Closure {
-    pub func: CompiledFunc,
-    pub free: Vec<Rc<dyn Object>>,
-}
-
-impl Object for Closure {
-    fn object_type(&self) -> ObjectType {
-        ObjectType::Closure
-    }
-    fn inspect(&self) -> String {
-        format!("Closure[{:p}]", self)
-    }
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
+pub struct ClosureObject<'a> {
+    pub func: CompiledFuncObject,
+    pub free: Vec<Object<'a>>,
 }
 
 pub struct Error {
     pub message: String,
 }
 
-impl Object for Error {
-    fn object_type(&self) -> ObjectType {
-        ObjectType::Error
-    }
-    fn inspect(&self) -> String {
-        format!("Error: {}", self.message)
-    }
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
-
-pub struct Function {
+pub struct FunctionObject<'a> {
     pub params: Vec<Identifier>,
     pub body: BlockStatement,
-    pub env: Rc<RefCell<Environment>>,
+    pub env: Rc<RefCell<Environment<'a>>>,
 }
 
-impl Object for Function {
-    fn object_type(&self) -> ObjectType {
-        ObjectType::Function
-    }
-    fn inspect(&self) -> String {
-        let params: Vec<String> = self.params.iter().map(|p| p.string()).collect();
-        format!("func({}) {{\n{}\n}}", params.join(", "), self.body.string())
-    }
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
+#[derive(Eq, PartialEq, Hash, Clone)]
+pub struct HashKey<'a> {
+    pub object_type: &'static str,
+    pub value: Object<'a>,
 }
 
 #[derive(Clone)]
-pub struct Str {
-    pub value: String,
+pub struct HashPair<'a> {
+    pub key: &'a Object<'a>,
+    pub value: &'a Object<'a>,
 }
 
-impl Object for Str {
-    fn object_type(&self) -> ObjectType {
-        ObjectType::String
+pub struct HashObject<'a> {
+    pub pairs: HashMap<HashKey<'a>, HashPair<'a>>,
+}
+
+impl<'a> HashObject<'a> {
+    pub fn new() -> Self {
+        HashObject {
+            pairs: HashMap::new(),
+        }
     }
-    fn inspect(&self) -> String {
-        self.value.clone()
+
+    pub fn insert(&mut self, key: Object, value: Object) {
+        let hash_key = self.make_hash_key(&key);
+        self.pairs.insert(
+            hash_key,
+            HashPair {
+                key: &key,
+                value: &value,
+            },
+        );
     }
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
 
-/// Hashable is one method called hash_key. Any object that that can be used as a HashKey must
-/// implement this interface (ObjectType::String, ObjectType::Boolean, ObjectType::Integer).
-pub trait Hashable {
-    fn hash_key(&self) -> HashKey;
-}
-
-#[derive(PartialEq, Debug, Eq)]
-pub struct HashKey {
-    object_type: ObjectType,
-    value: u64,
-}
-
-impl Hash for HashKey {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.object_type.hash(state);
-        self.value.hash(state);
-    }
-}
-
-impl Hashable for Boolean {
-    fn hash_key(&self) -> HashKey {
-        HashKey {
-            object_type: ObjectType::Boolean,
-            value: if self.value { 1 } else { 0 },
+    fn make_hash_key(&self, object: &Object) -> HashKey {
+        match object {
+            Object::Integer(value) => HashKey {
+                object_type: "INTEGER",
+                value: *value as u64,
+            },
+            Object::Str(value) => {
+                let mut hasher = std::collections::hash_map::DefaultHasher::new();
+                value.hash(&mut hasher);
+                let hash = hasher.finish();
+                HashKey {
+                    object_type: "STRING",
+                    value: hash,
+                }
+            }
+            Object::Boolean(b) => HashKey {
+                object_type: "BOOLEAN",
+                value: b,
+            },
+            _ => panic!("unsupported type for hashing"),
         }
     }
 }
 
-impl Hashable for Integer {
-    fn hash_key(&self) -> HashKey {
-        HashKey {
-            object_type: ObjectType::Integer,
-            value: self.value as u64,
-        }
+impl<'a> std::fmt::Display for HashObject<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let pairs: Vec<String> = self
+            .pairs
+            .iter()
+            .map(|(key, pair)| format!("{}: {}", key.value, pair.value))
+            .collect();
+        write!(f, "{{{}}}", pairs.join(", "))
     }
 }
 
-impl Hashable for Str {
-    fn hash_key(&self) -> HashKey {
-        use std::collections::hash_map::DefaultHasher;
-
-        let mut hasher = DefaultHasher::new();
-        self.value.hash(&mut hasher);
-        let hash = hasher.finish();
-
-        HashKey {
-            object_type: ObjectType::String,
-            value: hash,
-        }
-    }
-}
-
-pub struct HashPair {
-    pub key: Rc<dyn Object>,
-    pub value: Rc<dyn Object>,
-}
-
-pub struct HashMp {
-    pub pairs: HashMap<HashKey, HashPair>,
-}
-
-impl Object for HashMp {
-    fn object_type(&self) -> ObjectType {
-        ObjectType::Hash
-    }
-    fn inspect(&self) -> String {
-        let mut pairs_strings = Vec::new();
-        for pair in self.pairs.values() {
-            let key_inspect = pair.key.inspect();
-            let value_inspect = pair.value.inspect();
-            pairs_strings.push(format!("{}: {}", key_inspect, value_inspect));
-        }
-        let pairs_joined = pairs_strings.join(", ");
-        format!("{{{}}}", pairs_joined)
-    }
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
-
-pub struct ReturnValue {
-    pub value: Box<dyn Object>,
-}
-
-impl Object for ReturnValue {
-    fn object_type(&self) -> ObjectType {
-        ObjectType::ReturnValue
-    }
-    fn inspect(&self) -> String {
-        self.value.inspect()
-    }
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
-
-impl Object for Builtin {
-    fn object_type(&self) -> ObjectType {
-        ObjectType::Builtin
-    }
-    fn inspect(&self) -> String {
-        String::from("builtin function")
-    }
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
+pub struct ReturnValueObj<'a> {
+    pub value: Object<'a>,
 }
 
 #[cfg(test)]
@@ -335,18 +237,10 @@ mod tests {
 
     #[test]
     fn test_string_hash_key() {
-        let hello1 = Str {
-            value: String::from("Hello World"),
-        };
-        let hello2 = Str {
-            value: String::from("Hello World"),
-        };
-        let diff1 = Str {
-            value: String::from("My name is johnny"),
-        };
-        let diff2 = Str {
-            value: String::from("My name is johnny"),
-        };
+        let hello1 = Object::Str("Hello World".to_string());
+        let hello2 = Object::Str("Hello World".to_string());
+        let diff1 = Object::Str("My name is johnny".to_string());
+        let diff2 = Object::Str("My name is johnny".to_string());
         assert_eq!(
             hello1.hash_key(),
             hello2.hash_key(),
@@ -368,10 +262,10 @@ mod tests {
 
     #[test]
     fn test_boolean_hash_key() {
-        let true1 = Boolean { value: true };
-        let true2 = Boolean { value: true };
-        let false1 = Boolean { value: false };
-        let false2 = Boolean { value: false };
+        let true1 = Object::Boolean(true);
+        let true2 = Object::Boolean(true);
+        let false1 = Object::Boolean(false);
+        let false2 = Object::Boolean(false);
         assert_eq!(
             true1.hash_key(),
             true2.hash_key(),
@@ -391,10 +285,10 @@ mod tests {
 
     #[test]
     fn test_integer_hash_key() {
-        let int1 = Integer { value: 10 };
-        let int2 = Integer { value: 10 };
-        let diff1 = Integer { value: 30 };
-        let diff2 = Integer { value: 30 };
+        let int1 = Object::Integer(10);
+        let int2 = Object::Integer(10);
+        let diff1 = Object::Integer(30);
+        let diff2 = Object::Integer(30);
         assert_eq!(
             int1.hash_key(),
             int2.hash_key(),
@@ -417,22 +311,18 @@ mod tests {
         let mut pairs = HashMap::new();
         pairs.insert(
             HashKey {
-                object_type: ObjectType::String,
-                value: 1,
+                object_type: Object::Str,
+                value: Object::Integer(1),
             },
             HashPair {
-                key: Rc::new(Str {
-                    value: String::from("monkey"),
-                }),
-                value: Rc::new(Str {
-                    value: String::from("lang"),
-                }),
+                key: &Object::Str("monkey".to_string()),
+                value: &Object::Str("lang".to_string()),
             },
         );
-        let h = HashMp { pairs };
+        let h = Object::Hash(pairs);
         assert_eq!(
             h.object_type(),
-            ObjectType::Hash,
+            Object::Hash,
             "Hash object_type() returned wrong type. Expected: HashObj. Got: {:?}",
             h.object_type()
         );
@@ -446,15 +336,15 @@ mod tests {
 
     #[test]
     fn test_array() {
-        let elements: Vec<Rc<dyn Object>> = vec![
-            Rc::new(Integer { value: 1 }),
-            Rc::new(Integer { value: 2 }),
-            Rc::new(Integer { value: 3 }),
+        let elements = vec![
+            &Object::Integer(1),
+            &Object::Integer(2),
+            &Object::Integer(3),
         ];
-        let arr = Array { elements };
+        let arr = Object::Array(elements);
         assert_eq!(
             arr.object_type(),
-            ObjectType::Array,
+            Object::Array,
             "Array object_type() returned wrong type. Expected: ArrayObj. Got: {:?}",
             arr.object_type()
         );
@@ -468,10 +358,10 @@ mod tests {
 
     #[test]
     fn test_boolean() {
-        let b = Boolean { value: false };
+        let b = Object::Boolean(false);
         assert_eq!(
             b.object_type(),
-            ObjectType::Boolean,
+            Object::Boolean,
             "Boolean object_type() returned wrong type. Expected: BooleanObj. Got: {:?}",
             b.object_type()
         );
@@ -485,8 +375,8 @@ mod tests {
 
     #[test]
     fn test_closure() {
-        let cl = Closure {
-            func: CompiledFunc {
+        let cl = Object::ClosureObject {
+            func: Object::CompiledFuncObject {
                 instructions: Instructions::new(vec![]),
                 num_locals: 0,
                 num_params: 0,
@@ -495,7 +385,7 @@ mod tests {
         };
         assert_eq!(
             cl.object_type(),
-            ObjectType::Closure,
+            Object::Closure,
             "Closure object_type() returned wrong type. Expected: ClosureObj. Got: {:?}",
             cl.object_type()
         );
@@ -511,14 +401,14 @@ mod tests {
 
     #[test]
     fn test_compiled_function() {
-        let cf = CompiledFunc {
+        let cf = CompiledFuncObject {
             instructions: Instructions::new(Vec::from("OpDoesntMatter".as_bytes())),
             num_locals: 1,
             num_params: 1,
         };
         assert_eq!(
             cf.object_type(),
-            ObjectType::CompiledFunction,
+            Object::CompiledFunction,
             "CompiledFunction object_type() returned wrong type. Expected: CompiledFunctionObj. Got: {:?}",
             cf.object_type()
         );
@@ -539,7 +429,7 @@ mod tests {
         };
         assert_eq!(
             e.object_type(),
-            ObjectType::Error,
+            Object::Error,
             "Error object_type() returned wrong type. Expected: ErrorObj. Got: {:?}",
             e.object_type()
         );
@@ -557,7 +447,7 @@ mod tests {
         use crate::environment::Environment;
         use crate::token::{Token, TokenType};
 
-        let f = Function {
+        let f = FunctionObject {
             params: vec![Identifier {
                 token: Token {
                     token_type: TokenType::String,
@@ -600,7 +490,7 @@ mod tests {
         };
         assert_eq!(
             f.object_type(),
-            ObjectType::Function,
+            Object::Function,
             "Function object_type() returned wrong type. Expected: FunctionObj. Got: {:?}",
             f.object_type()
         );
@@ -614,10 +504,10 @@ mod tests {
 
     #[test]
     fn test_integers() {
-        let integer = Integer { value: 666 };
+        let integer = Object::Integer(666);
         assert_eq!(
             integer.object_type(),
-            ObjectType::Integer,
+            Object::Integer,
             "Integer object_type() returned wrong type. Expected: IntegerObj. Got: {:?}",
             integer.object_type()
         );
@@ -634,7 +524,7 @@ mod tests {
         let n = Null {};
         assert_eq!(
             n.object_type(),
-            ObjectType::Null,
+            Object::Null,
             "Null object_type() returned wrong type. Expected: NullObj. Got: {:?}",
             n.object_type()
         );
@@ -648,14 +538,14 @@ mod tests {
 
     #[test]
     fn test_return_values() {
-        let rv = ReturnValue {
+        let rv = Object::ReturnValueObject {
             value: Box::new(Str {
                 value: "im a returned string".to_string(),
             }),
         };
         assert_eq!(
             rv.object_type(),
-            ObjectType::ReturnValue,
+            Object::ReturnValue,
             "ReturnValue object_type() returned wrong type. Expected: ReturnValueObj. Got: {:?}",
             rv.object_type()
         );
@@ -674,7 +564,7 @@ mod tests {
         };
         assert_eq!(
             s.object_type(),
-            ObjectType::String,
+            Object::String,
             "String object_type() returned wrong type. Expected: StringObj. Got: {:?}",
             s.object_type()
         );
@@ -691,17 +581,17 @@ mod tests {
         use crate::builtins;
         use std::sync::Arc;
 
-        fn null_builtin_func(_args: Vec<Rc<dyn Object>>) -> Rc<dyn Object> {
+        fn null_builtin_func(_args: Vec<Object>) -> Object {
             Rc::new(Null {})
         }
 
-        let b = Builtin {
+        let b = BuiltinObject {
             func: Arc::new(null_builtin_func),
         };
 
         assert_eq!(
             b.object_type(),
-            ObjectType::Builtin,
+            Object::Builtin,
             "Builtin object_type() returned wrong type. Expected: BuiltinObj. Got: {:?}",
             b.object_type()
         );

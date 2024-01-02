@@ -1,37 +1,37 @@
 use crate::object::Object;
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
 /// Environment holds a store of key value pairs and a an "outer", enclosing environment.
-pub struct Environment {
-    store: HashMap<String, Rc<dyn Object>>,
-    outer: Option<Rc<RefCell<Environment>>>,
+pub struct Environment<'a> {
+    store: HashMap<String, Object<'a>>,
+    outer: Option<Rc<Environment<'a>>>,
 }
 
-impl Environment {
-    pub fn new() -> Rc<RefCell<Self>> {
-        Rc::new(RefCell::new(Environment {
+impl<'a> Environment<'a> {
+    pub fn new() -> Self {
+        Environment {
             store: HashMap::new(),
             outer: None,
-        }))
+        }
     }
 
-    pub fn new_enclosed(outer: Rc<RefCell<Environment>>) -> Rc<RefCell<Self>> {
-        Rc::new(RefCell::new(Environment {
+    pub fn new_enclosed(outer: Environment) -> Self {
+        Environment {
             store: HashMap::new(),
-            outer: Some(outer),
-        }))
+            outer: Some(Rc::new(outer)),
+        }
     }
 
-    pub fn get(&self, name: &str) -> Option<Rc<dyn Object>> {
-        self.store
-            .get(name)
-            .cloned()
-            .or_else(|| self.outer.as_ref()?.borrow().get(name))
+    pub fn get(&self, name: &str) -> Option<Object> {
+        self.store.get(name).cloned().or_else(|| {
+            self.outer
+                .as_ref()
+                .and_then(|outer_env| outer_env.get(name))
+        })
     }
 
-    pub fn set(&mut self, name: String, val: Rc<dyn Object>) {
+    pub fn set(&mut self, name: String, val: Object) {
         self.store.insert(name, val);
     }
 }
@@ -39,38 +39,27 @@ impl Environment {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::object::Str;
 
     #[test]
     fn test_environments() {
-        let outer_env = Environment::new();
-        let env = Environment::new_enclosed(Rc::clone(&outer_env));
-        env.borrow_mut().set(
+        let mut outer_env = Environment::new();
+        let mut env = Environment::new_enclosed(outer_env);
+        env.set(
             "innerKey".to_string(),
-            Rc::new(Str {
-                value: "innerValue".to_string(),
-            }),
+            Object::Str("innerValue".to_string()),
         );
-        outer_env.borrow_mut().set(
+        outer_env.set(
             "outerKey".to_string(),
-            Rc::new(Str {
-                value: "outerValue".to_string(),
-            }),
+            Object::Str("outerValue".to_string()),
         );
-        let obj = env
-            .borrow()
-            .get("innerKey")
-            .expect("Failed to retrieve 'innerKey'");
+        let obj = env.get("innerKey").expect("Failed to retrieve 'innerKey'");
         assert_eq!(
             obj.inspect(),
             "innerValue",
             "Expected 'innerValue'. Got: {}",
             obj.inspect()
         );
-        let obj = env
-            .borrow()
-            .get("outerKey")
-            .expect("Failed to retrieve 'outerKey'");
+        let obj = env.get("outerKey").expect("Failed to retrieve 'outerKey'");
         assert_eq!(
             obj.inspect(),
             "outerValue",
