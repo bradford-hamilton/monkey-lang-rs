@@ -3,6 +3,7 @@ use compiler::Compiler;
 use lexer::Lexer;
 use parser::Parser;
 use std::fs;
+use std::time::Instant;
 use vm::VirtualMachine;
 
 mod ast;
@@ -19,7 +20,7 @@ mod token;
 mod vm;
 
 fn main() {
-    let filename = "test_input.mo";
+    let filename = "fib.mo";
     let input = match fs::read_to_string(filename) {
         Ok(string) => string,
         Err(error) => panic!("error reading file {}: {}", filename, error),
@@ -47,5 +48,9 @@ fn compile_bytecode_and_run(root_node: RootNode) {
     let code = compiler.bytecode();
     let mut vm = VirtualMachine::new(code);
 
+    let start = Instant::now();
     vm.run();
+    let duration = start.elapsed();
+
+    println!("execution time: {:?}", duration);
 }

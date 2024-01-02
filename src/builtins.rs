@@ -224,7 +224,7 @@ fn b_split(args: Vec<Rc<dyn Object>>) -> Rc<dyn Object> {
             ))
         }
     };
-    if str_arg.value == "" {
+    if str_arg.value.is_empty() {
         return Rc::new(Array { elements: vec![] });
     }
 
@@ -268,7 +268,7 @@ fn b_join(args: Vec<Rc<dyn Object>>) -> Rc<dyn Object> {
             ));
         }
     };
-    if array_arg.elements.len() == 0 {
+    if array_arg.elements.is_empty() {
         return Rc::new(Str {
             value: "".to_string(),
         });

@@ -13,13 +13,11 @@ pub trait Node {
 
 /// Statement - must provide statement_node, token_literal, and string methods. Statements do not produce values.
 pub trait Statement: Node {
-    fn statement_node(&self);
     fn as_node(&self) -> &dyn Node;
 }
 
 /// Expression - must provide expression_node, token_literal, and string methods. Expressions produce values.
 pub trait Expression: Node {
-    fn expression_node(&self);
     fn as_node(&self) -> &dyn Node;
 }
 
@@ -55,10 +53,10 @@ impl Node for RootNode {
 pub struct ZeroValueExpression {}
 impl Node for ZeroValueExpression {
     fn token_literal(&self) -> String {
-        String::from("zero value expression")
+        "zero value expression".to_string()
     }
     fn string(&self) -> String {
-        String::from("zero value expression")
+        "zero value expression".to_string()
     }
     fn as_any(&self) -> &dyn Any {
         self
@@ -66,7 +64,6 @@ impl Node for ZeroValueExpression {
 }
 
 impl Expression for ZeroValueExpression {
-    fn expression_node(&self) {}
     fn as_node(&self) -> &dyn Node {
         self
     }
@@ -76,10 +73,10 @@ impl Expression for ZeroValueExpression {
 pub struct ZeroValueStatement {}
 impl Node for ZeroValueStatement {
     fn token_literal(&self) -> String {
-        String::from("zero value statement")
+        "zero value statement".to_string()
     }
     fn string(&self) -> String {
-        String::from("zero value statement")
+        "zero value statement".to_string()
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -88,7 +85,6 @@ impl Node for ZeroValueStatement {
 }
 
 impl Statement for ZeroValueStatement {
-    fn statement_node(&self) {}
     fn as_node(&self) -> &dyn Node {
         self
     }
@@ -115,7 +111,6 @@ impl Node for Identifier {
 }
 
 impl Expression for Identifier {
-    fn expression_node(&self) {}
     fn as_node(&self) -> &dyn Node {
         self
     }
@@ -142,7 +137,6 @@ impl Node for IntegerLiteral {
 }
 
 impl Expression for IntegerLiteral {
-    fn expression_node(&self) {}
     fn as_node(&self) -> &dyn Node {
         self
     }
@@ -178,7 +172,6 @@ impl Node for PrefixExpression {
 }
 
 impl Expression for PrefixExpression {
-    fn expression_node(&self) {}
     fn as_node(&self) -> &dyn Node {
         self
     }
@@ -207,7 +200,6 @@ impl Node for Boolean {
 }
 
 impl Expression for Boolean {
-    fn expression_node(&self) {}
     fn as_node(&self) -> &dyn Node {
         self
     }
@@ -247,7 +239,6 @@ impl Node for IfExpression {
 }
 
 impl Expression for IfExpression {
-    fn expression_node(&self) {}
     fn as_node(&self) -> &dyn Node {
         self
     }
@@ -278,7 +269,6 @@ impl Node for BlockStatement {
 }
 
 impl Expression for BlockStatement {
-    fn expression_node(&self) {}
     fn as_node(&self) -> &dyn Node {
         self
     }
@@ -311,7 +301,6 @@ impl Node for LetStatement {
 }
 
 impl Statement for LetStatement {
-    fn statement_node(&self) {}
     fn as_node(&self) -> &dyn Node {
         self
     }
@@ -344,7 +333,6 @@ impl Node for ConstStatement {
 }
 
 impl Statement for ConstStatement {
-    fn statement_node(&self) {}
     fn as_node(&self) -> &dyn Node {
         self
     }
@@ -372,7 +360,6 @@ impl Node for ReturnStatement {
 }
 
 impl Statement for ReturnStatement {
-    fn statement_node(&self) {}
     fn as_node(&self) -> &dyn Node {
         self
     }
@@ -403,7 +390,6 @@ impl Node for ExpressionStatement {
 }
 
 impl Statement for ExpressionStatement {
-    fn statement_node(&self) {}
     fn as_node(&self) -> &dyn Node {
         self
     }
@@ -446,7 +432,6 @@ impl Node for FunctionLiteral {
 }
 
 impl Expression for FunctionLiteral {
-    fn expression_node(&self) {}
     fn as_node(&self) -> &dyn Node {
         self
     }
@@ -473,7 +458,6 @@ impl Node for StringLiteral {
 }
 
 impl Expression for StringLiteral {
-    fn expression_node(&self) {}
     fn as_node(&self) -> &dyn Node {
         self
     }
@@ -508,7 +492,6 @@ impl Node for ArrayLiteral {
 }
 
 impl Expression for ArrayLiteral {
-    fn expression_node(&self) {}
     fn as_node(&self) -> &dyn Node {
         self
     }
@@ -568,7 +551,6 @@ impl Node for HashLiteral {
 }
 
 impl Expression for HashLiteral {
-    fn expression_node(&self) {}
     fn as_node(&self) -> &dyn Node {
         self
     }
@@ -604,7 +586,6 @@ impl Node for InfixExpression {
 }
 
 impl Expression for InfixExpression {
-    fn expression_node(&self) {}
     fn as_node(&self) -> &dyn Node {
         self
     }
@@ -635,7 +616,6 @@ impl Node for CallExpression {
 }
 
 impl Expression for CallExpression {
-    fn expression_node(&self) {}
     fn as_node(&self) -> &dyn Node {
         self
     }
@@ -662,7 +642,6 @@ impl Node for IndexExpression {
 }
 
 impl Expression for IndexExpression {
-    fn expression_node(&self) {}
     fn as_node(&self) -> &dyn Node {
         self
     }

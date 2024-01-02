@@ -182,8 +182,9 @@ impl Compiler {
         }
         self.scopes
             .get(self.scope_index as usize)
-            .map_or(false, |scope| match &scope.last_instruction {
-                last_instr => last_instr.opcode == op,
+            .map_or(false, |scope| {
+                let last_instr = &scope.last_instruction;
+                last_instr.opcode == op
             })
     }
 
@@ -193,7 +194,7 @@ impl Compiler {
             let new_instructions_slice = &scope.instructions.as_vec_u8()[..last_instr.position];
             let new_instructions = Instructions::new(new_instructions_slice.to_vec());
             scope.instructions = new_instructions;
-            scope.last_instruction = scope.prev_instruction.clone();
+            scope.last_instruction = scope.prev_instruction;
         }
     }
 
@@ -321,7 +322,7 @@ impl Compiler {
             // Change the jump-to position in the OpJumpNotTruthy emission earlier
             self.change_operand(jump_not_truthy_pos, after_consequence_pos);
 
-            if if_expr.alternative.statements.len() > 0 {
+            if !if_expr.alternative.statements.is_empty() {
                 for stmt in &if_expr.alternative.statements {
                     self.compile(stmt.as_node())?;
                 }

@@ -17,7 +17,7 @@ impl Instructions {
         while i < self.0.len() {
             match lookup(Opcode::from(self.0[i])) {
                 Ok(def) => {
-                    let (operands, read) = read_operands(&def, &self.0[i + 1..]);
+                    let (operands, read) = read_operands(def, &self.0[i + 1..]);
                     output.push_str(&format!("{:04} {}\n", i, fmt_instruction(def, operands)));
                     i += 1 + read;
                 }

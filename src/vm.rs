@@ -486,10 +486,7 @@ impl<'a> VirtualMachine<'a> {
     // func (vm *VM) executePostfixOperator(op code.Opcode, ins code.Instructions, ip int)
 
     fn build_array(&self, start_index: usize, end_index: usize) -> Rc<dyn Object> {
-        let elements = self.stack[start_index..end_index]
-            .iter()
-            .cloned() // efficient clone of Rc pointers
-            .collect::<Vec<Rc<dyn Object>>>();
+        let elements = self.stack[start_index..end_index].to_vec();
 
         Rc::new(Array { elements })
     }
@@ -615,10 +612,8 @@ impl<'a> VirtualMachine<'a> {
 
     fn call_builtin(&mut self, builtin: Rc<dyn Object>, num_args: usize) {
         let builtin_func = builtin.as_any().downcast_ref::<Builtin>().unwrap();
-        let args: Vec<Rc<dyn Object>> = self.stack[self.sp as usize - num_args..self.sp as usize]
-            .iter()
-            .cloned()
-            .collect();
+        let args: Vec<Rc<dyn Object>> =
+            self.stack[self.sp as usize - num_args..self.sp as usize].to_vec();
         let result = builtin_func.call(args);
 
         self.sp -= num_args as u64 - 1;

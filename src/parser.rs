@@ -1908,7 +1908,7 @@ mod tests {
     #[test]
     fn test_parsing_hash_literals_string_keys() {
         let input = "{\"one\": 1, \"two\": 2, \"three\": 3}".to_string();
-        let mut lexer = Lexer::new(input); // Assuming you have a lexer
+        let lexer = Lexer::new(input); // Assuming you have a lexer
         let mut parser = Parser::new(lexer); // Assuming you have a parser
         let program = parser.parse_program(); // Parse the program
                                               // Assuming a function to check for parser errors
@@ -2047,7 +2047,7 @@ mod tests {
                     },
                     value: key.to_string(),
                 })))
-                .expect(&format!("No value found for key {}", key));
+                .unwrap_or_else(|| panic!("No value found for key {}", key));
 
             test_infix_expression(
                 value,

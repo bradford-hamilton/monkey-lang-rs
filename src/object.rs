@@ -80,7 +80,7 @@ impl Object for Null {
         ObjectType::Null
     }
     fn inspect(&self) -> String {
-        String::from("null")
+        "null".to_string()
     }
     fn as_any(&self) -> &dyn Any {
         self
@@ -283,7 +283,7 @@ impl Object for HashMp {
     }
     fn inspect(&self) -> String {
         let mut pairs_strings = Vec::new();
-        for (_, pair) in &self.pairs {
+        for pair in self.pairs.values() {
             let key_inspect = pair.key.inspect();
             let value_inspect = pair.value.inspect();
             pairs_strings.push(format!("{}: {}", key_inspect, value_inspect));
