@@ -8,6 +8,7 @@ use crate::lexer::Lexer;
 use crate::token::{Token, TokenType};
 use lazy_static::lazy_static;
 use std::collections::HashMap;
+use std::rc::Rc;
 
 /// Operator precedence table.
 #[derive(Copy, Clone, PartialEq, PartialOrd)]
@@ -87,17 +88,17 @@ impl Parser {
             errors: vec![],
             current_token: Token {
                 line: 0,
-                literal: String::from(""),
+                literal: "".to_string(),
                 token_type: TokenType::None,
             },
             peek_token: Token {
                 line: 0,
-                literal: String::from(""),
+                literal: "".to_string(),
                 token_type: TokenType::None,
             },
             prev_token: Token {
                 line: 0,
-                literal: String::from(""),
+                literal: "".to_string(),
                 token_type: TokenType::None,
             },
             prefix_parse_funcs: HashMap::new(),
@@ -256,7 +257,7 @@ impl Parser {
                     self.current_token.line, self.current_token.literal
                 );
                 self.errors.push(msg);
-                ZeroValueExpression {}
+                Expression::ZeroValue(ZeroValueExpression {})
             }
         };
 
@@ -274,7 +275,7 @@ impl Parser {
                         self.current_token.line, self.current_token.literal
                     );
                     self.errors.push(msg);
-                    Box::new(ZeroValueExpression {})
+                    Expression::ZeroValue(ZeroValueExpression {})
                 }
             };
 
@@ -282,7 +283,7 @@ impl Parser {
         }
 
         if !self.expect_peek_type(end) {
-            return vec![Box::new(ZeroValueExpression {})];
+            return vec![Expression::ZeroValue(ZeroValueExpression {})];
         }
 
         list
@@ -378,96 +379,96 @@ fn parse_identifier(parser: &mut Parser) -> Expression {
         return postfix(parser);
     }
 
-    Box::new(Identifier {
-        token: parser.current_token.clone(),
-        value: parser.current_token.literal.clone(),
+    Expression::Identifier(Identifier {
+        token: parser.current_token,
+        value: parser.current_token.literal,
     })
 }
 
 fn parse_infix_expr(parser: &mut Parser, left: Expression) -> Expression {
     let mut expr = InfixExpression {
-        token: parser.current_token.clone(),
-        operator: parser.current_token.literal.clone(),
-        left,
-        right: Box::new(ZeroValueExpression {}),
+        token: parser.current_token,
+        operator: parser.current_token.literal,
+        left: Rc::new(left),
+        right: Rc::new(Expression::ZeroValue(ZeroValueExpression {})),
     };
     let precedence = parser.current_token_precedence();
 
     parser.next_token();
 
     expr.right = match parser.parse_expression(precedence) {
-        Some(expr) => expr,
+        Some(expr) => Rc::new(expr),
         _ => {
             let msg = format!(
                 "Line {}: Failed to parse expression {}.",
                 parser.current_token.line, parser.current_token.literal,
             );
             parser.errors.push(msg);
-            ZeroValueExpression {}
+            Rc::new(Expression::ZeroValue(ZeroValueExpression {}))
         }
     };
 
-    expr
+    Expression::Infix(expr)
 }
 
 fn parse_call_expr(parser: &mut Parser, func: Expression) -> Expression {
-    CallExpression {
+    Expression::Call(CallExpression {
         token: parser.current_token.clone(),
-        function: func,
+        function: Rc::new(func),
         arguments: parser.parse_expression_list(TokenType::RightParen),
-    }
+    })
 }
 
 fn parse_index_expr(parser: &mut Parser, left: Expression) -> Expression {
     let mut expr = IndexExpression {
-        token: parser.current_token.clone(),
-        left,
-        index: ZeroValueExpression {},
+        token: parser.current_token,
+        left: Rc::new(left),
+        index: Expression::ZeroValue(ZeroValueExpression {}).into(),
     };
 
     parser.next_token();
 
     expr.index = match parser.parse_expression(OpPrecedence::Lowest) {
-        Some(box_expr) => box_expr,
+        Some(expr) => Rc::new(expr),
         _ => {
             let msg = format!(
                 "Line {}: Failed to parse expression {}.",
                 parser.current_token.line, parser.current_token.literal,
             );
             parser.errors.push(msg);
-            ZeroValueExpression {}
+            Rc::new(Expression::ZeroValue(ZeroValueExpression {}))
         }
     };
 
     if !parser.expect_peek_type(TokenType::RightBracket) {
-        return ZeroValueExpression {};
+        return Expression::ZeroValue(ZeroValueExpression {});
     }
 
-    expr
+    Expression::Index(expr)
 }
 
 fn parse_prefix_expr(parser: &mut Parser) -> Expression {
     let mut expr = PrefixExpression {
-        token: parser.current_token.clone(),
-        operator: parser.current_token.literal.clone(),
-        right: ZeroValueExpression {},
+        token: parser.current_token,
+        operator: parser.current_token.literal,
+        right: Rc::new(Expression::ZeroValue(ZeroValueExpression {})),
     };
 
     parser.next_token();
 
     expr.right = match parser.parse_expression(OpPrecedence::Prefix) {
-        Some(expr) => expr,
+        Some(expr) => Rc::new(expr),
         _ => {
             let msg = format!(
                 "Line {}: Failed to parse expression {}.",
                 parser.current_token.line, parser.current_token.literal
             );
             parser.errors.push(msg);
-            ZeroValueExpression {}
+            Rc::new(Expression::ZeroValue(ZeroValueExpression {}))
         }
     };
 
-    expr
+    Expression::Prefix(expr)
 }
 
 fn parse_grouped_expr(parser: &mut Parser) -> Expression {
@@ -481,12 +482,12 @@ fn parse_grouped_expr(parser: &mut Parser) -> Expression {
                 parser.current_token.line, parser.current_token.literal
             );
             parser.errors.push(msg);
-            ZeroValueExpression {}
+            Expression::ZeroValue(ZeroValueExpression {})
         }
     };
 
     if !parser.expect_peek_type(TokenType::RightParen) {
-        return ZeroValueExpression {};
+        return Expression::ZeroValue(ZeroValueExpression {});
     }
 
     expr
@@ -494,41 +495,41 @@ fn parse_grouped_expr(parser: &mut Parser) -> Expression {
 
 fn parse_if_expr(parser: &mut Parser) -> Expression {
     let mut expr = IfExpression {
-        token: parser.current_token.clone(),
-        condition: ZeroValueExpression {},
+        token: parser.current_token,
+        condition: Rc::new(Expression::ZeroValue(ZeroValueExpression {})),
         consequence: BlockStatement {
-            token: parser.current_token.clone(),
+            token: parser.current_token,
             statements: vec![],
         },
-        alternative: Some(BlockStatement {
-            token: parser.current_token.clone(),
+        alternative: BlockStatement {
+            token: parser.current_token,
             statements: vec![],
-        }),
+        },
     };
 
     if !parser.expect_peek_type(TokenType::LeftParen) {
-        return ZeroValueExpression {};
+        return Expression::ZeroValue(ZeroValueExpression {});
     }
 
     parser.next_token();
 
     expr.condition = match parser.parse_expression(OpPrecedence::Lowest) {
-        Some(cond) => cond,
+        Some(cond) => Rc::new(cond),
         _ => {
             let msg = format!(
                 "Line {}: Failed to parse expression {}.",
                 parser.current_token.line, parser.current_token.literal
             );
             parser.errors.push(msg);
-            ZeroValueExpression {}
+            Rc::new(Expression::ZeroValue(ZeroValueExpression {}))
         }
     };
 
     if !parser.expect_peek_type(TokenType::RightParen) {
-        return ZeroValueExpression {};
+        return Expression::ZeroValue(ZeroValueExpression {});
     }
     if !parser.expect_peek_type(TokenType::LeftBrace) {
-        return ZeroValueExpression {};
+        return Expression::ZeroValue(ZeroValueExpression {});
     }
 
     expr.consequence = parser.parse_block_statement();
@@ -537,42 +538,42 @@ fn parse_if_expr(parser: &mut Parser) -> Expression {
         parser.next_token();
 
         if !parser.expect_peek_type(TokenType::LeftBrace) {
-            return ZeroValueExpression {};
+            return Expression::ZeroValue(ZeroValueExpression {});
         }
 
         expr.alternative = parser.parse_block_statement();
     }
 
-    expr
+    Expression::If(expr)
 }
 
 fn parse_let_statement(parser: &mut Parser) -> Statement {
     let zero_value_token = Token {
         token_type: TokenType::None,
-        literal: String::from(""),
+        literal: "".to_string(),
         line: 0,
     };
     let zero_value_identifier = Identifier {
         token: zero_value_token,
-        value: String::from(""),
+        value: "".to_string(),
     };
     let mut stmt = LetStatement {
-        token: parser.current_token.clone(),
+        token: parser.current_token,
         name: zero_value_identifier,
-        value: ZeroValueExpression {},
+        value: Expression::ZeroValue(ZeroValueExpression {}),
     };
 
     if !parser.expect_peek_type(TokenType::Identifier) {
-        return ZeroValueStatement {};
+        return Statement::ZeroValue(ZeroValueStatement {});
     }
 
     stmt.name = Identifier {
-        token: parser.current_token.clone(),
-        value: parser.current_token.literal.clone(),
+        token: parser.current_token,
+        value: parser.current_token.literal,
     };
 
     if !parser.expect_peek_type(TokenType::Equal) {
-        return ZeroValueStatement {};
+        return Statement::ZeroValue(ZeroValueStatement {});
     }
 
     parser.next_token();
@@ -585,48 +586,51 @@ fn parse_let_statement(parser: &mut Parser) -> Statement {
                 parser.current_token.line, parser.current_token.literal
             );
             parser.errors.push(msg);
-            ZeroValueExpression {}
+            Expression::ZeroValue(ZeroValueExpression {})
         }
     };
 
-    if let Some(func_literal) = stmt.value.as_any().downcast_ref::<FunctionLiteral>() {
-        *func_literal.name.borrow_mut() = stmt.name.value.clone();
+    match stmt.value {
+        Expression::Function(ref mut func_literal) => {
+            func_literal.name = stmt.name.value;
+        }
+        _ => {}
     }
 
     if parser.peek_token_type_is(TokenType::Semicolon) {
         parser.next_token();
     }
 
-    stmt
+    Statement::Let(stmt)
 }
 
 fn parse_const_statement(parser: &mut Parser) -> Statement {
     let zero_value_token = Token {
         token_type: TokenType::None,
-        literal: String::from(""),
+        literal: "".to_string(),
         line: 0,
     };
     let zero_value_identifier = Identifier {
         token: zero_value_token,
-        value: String::from(""),
+        value: "".to_string(),
     };
     let mut stmt = ConstStatement {
-        token: parser.current_token.clone(),
+        token: parser.current_token,
         name: zero_value_identifier,
-        value: ZeroValueExpression {},
+        value: Expression::ZeroValue(ZeroValueExpression {}),
     };
 
     if !parser.expect_peek_type(TokenType::Identifier) {
-        return ZeroValueStatement {};
+        return Statement::ZeroValue(ZeroValueStatement {});
     }
 
     stmt.name = Identifier {
-        token: parser.current_token.clone(),
-        value: parser.current_token.literal.clone(),
+        token: parser.current_token,
+        value: parser.current_token.literal,
     };
 
     if !parser.expect_peek_type(TokenType::Equal) {
-        return ZeroValueStatement {};
+        return Statement::ZeroValue(ZeroValueStatement {});
     }
 
     parser.next_token();
@@ -639,25 +643,28 @@ fn parse_const_statement(parser: &mut Parser) -> Statement {
                 parser.current_token.line, parser.current_token.literal
             );
             parser.errors.push(msg);
-            Box::new(ZeroValueExpression {})
+            Expression::ZeroValue(ZeroValueExpression {})
         }
     };
 
-    if let Some(func_literal) = stmt.value.as_any().downcast_ref::<FunctionLiteral>() {
-        *func_literal.name.borrow_mut() = stmt.name.value.clone();
+    match stmt.value {
+        Expression::Function(ref mut func_literal) => {
+            func_literal.name = stmt.name.value;
+        }
+        _ => {}
     }
 
     if parser.peek_token_type_is(TokenType::Semicolon) {
         parser.next_token();
     }
 
-    Box::new(stmt)
+    Statement::Const(stmt)
 }
 
 fn parse_return_statement(parser: &mut Parser) -> Statement {
     let mut stmt = ReturnStatement {
-        token: parser.current_token.clone(),
-        return_value: Box::new(ZeroValueExpression {}),
+        token: parser.current_token,
+        return_value: Expression::ZeroValue(ZeroValueExpression {}),
     };
 
     parser.next_token();
@@ -670,7 +677,7 @@ fn parse_return_statement(parser: &mut Parser) -> Statement {
                 parser.current_token.line, parser.current_token.literal,
             );
             parser.errors.push(msg);
-            ZeroValueExpression {}
+            Expression::ZeroValue(ZeroValueExpression {})
         }
     };
 
@@ -678,13 +685,13 @@ fn parse_return_statement(parser: &mut Parser) -> Statement {
         parser.next_token();
     }
 
-    stmt
+    Statement::Return(stmt)
 }
 
 fn parse_expr_statement(parser: &mut Parser) -> Statement {
     let mut stmt = ExpressionStatement {
-        token: parser.current_token.clone(),
-        expression: ZeroValueExpression {},
+        token: parser.current_token,
+        expression: Expression::ZeroValue(ZeroValueExpression {}),
     };
 
     stmt.expression = match parser.parse_expression(OpPrecedence::Lowest) {
@@ -695,7 +702,7 @@ fn parse_expr_statement(parser: &mut Parser) -> Statement {
                 parser.current_token.line, parser.current_token.literal,
             );
             parser.errors.push(msg);
-            ZeroValueExpression {}
+            Expression::ZeroValue(ZeroValueExpression {})
         }
     };
 
@@ -703,7 +710,7 @@ fn parse_expr_statement(parser: &mut Parser) -> Statement {
         parser.next_token();
     }
 
-    stmt
+    Statement::Expression(stmt)
 }
 
 fn parse_function_literal(parser: &mut Parser) -> Expression {
@@ -713,7 +720,7 @@ fn parse_function_literal(parser: &mut Parser) -> Expression {
         line: 0,
     };
     let mut func_literal = FunctionLiteral {
-        token: parser.current_token.clone(),
+        token: parser.current_token,
         parameters: vec![],
         body: BlockStatement {
             token: zero_value_token,
@@ -723,30 +730,30 @@ fn parse_function_literal(parser: &mut Parser) -> Expression {
     };
 
     if !parser.expect_peek_type(TokenType::LeftParen) {
-        return ZeroValueExpression {};
+        return Expression::ZeroValue(ZeroValueExpression {});
     }
 
     func_literal.parameters = parser.parse_function_params();
 
     if !parser.expect_peek_type(TokenType::LeftBrace) {
-        return ZeroValueExpression {};
+        return Expression::ZeroValue(ZeroValueExpression {});
     }
 
     func_literal.body = parser.parse_block_statement();
 
-    func_literal
+    Expression::Function(func_literal)
 }
 
 fn parse_array_literal(parser: &mut Parser) -> Expression {
-    ArrayLiteral {
-        token: parser.current_token.clone(),
+    Expression::Array(ArrayLiteral {
+        token: parser.current_token,
         elements: parser.parse_expression_list(TokenType::RightBracket),
-    }
+    })
 }
 
 fn parse_hash_literal(parser: &mut Parser) -> Expression {
     let mut hash = HashLiteral {
-        token: parser.current_token.clone(),
+        token: parser.current_token,
         pairs: HashMap::new(),
     };
 
@@ -761,12 +768,12 @@ fn parse_hash_literal(parser: &mut Parser) -> Expression {
                     parser.current_token.line, parser.current_token.literal,
                 );
                 parser.errors.push(msg);
-                ZeroValueExpression {}
+                Expression::ZeroValue(ZeroValueExpression {})
             }
         };
 
         if !parser.expect_peek_type(TokenType::Colon) {
-            return ZeroValueExpression {};
+            return Expression::ZeroValue(ZeroValueExpression {});
         }
 
         parser.next_token();
@@ -779,7 +786,7 @@ fn parse_hash_literal(parser: &mut Parser) -> Expression {
                     parser.current_token.line, parser.current_token.literal,
                 );
                 parser.errors.push(msg);
-                ZeroValueExpression {}
+                Expression::ZeroValue(ZeroValueExpression {})
             }
         };
 
@@ -788,41 +795,41 @@ fn parse_hash_literal(parser: &mut Parser) -> Expression {
         if !parser.peek_token_type_is(TokenType::RightBrace)
             && !parser.expect_peek_type(TokenType::Comma)
         {
-            return ZeroValueExpression {};
+            return Expression::ZeroValue(ZeroValueExpression {});
         }
     }
 
     if !parser.expect_peek_type(TokenType::RightBrace) {
-        return ZeroValueExpression {};
+        return Expression::ZeroValue(ZeroValueExpression {});
     }
 
-    hash
+    Expression::Hash(hash)
 }
 
 fn parse_string_literal(parser: &mut Parser) -> Expression {
-    StringLiteral {
-        token: parser.current_token.clone(),
-        value: parser.current_token.literal.clone(),
-    }
+    Expression::String(StringLiteral {
+        token: parser.current_token,
+        value: parser.current_token.literal,
+    })
 }
 
 fn parse_integer_literal(parser: &mut Parser) -> Expression {
-    IntegerLiteral {
-        token: parser.current_token.clone(),
+    Expression::Integer(IntegerLiteral {
+        token: parser.current_token,
         // TODO: update to handle instead of unwrapping
-        value: parser.current_token.literal.parse::<usize>().unwrap(),
-    }
+        value: parser.current_token.literal.parse::<i64>().unwrap(),
+    })
 }
 
 fn parse_boolean(parser: &mut Parser) -> Expression {
-    Boolean {
-        token: parser.current_token.clone(),
+    Expression::Boolean(Boolean {
+        token: parser.current_token,
         value: parser.current_token_type_is(TokenType::True),
-    }
+    })
 }
 
 fn is_zero_value_statement(stmt: &Statement) -> bool {
-    stmt.as_any().is::<ZeroValueStatement>()
+    matches!(stmt, Statement::ZeroValue(_))
 }
 
 #[cfg(test)]
@@ -844,41 +851,50 @@ mod tests {
 
     fn test_let_statement(stmt: &Statement, expected_identifier: &str) {
         if stmt.token_literal() != "let" {
-            panic!("statement.token_literal not let: {}", stmt.token_literal());
+            panic!(
+                "statement.token_literal not 'let': {}",
+                stmt.token_literal()
+            );
         }
-        if !stmt.as_any().is::<LetStatement>() {
-            panic!("statement is not a LetStatement");
-        }
-        let let_statement = stmt.as_any().downcast_ref::<LetStatement>().unwrap();
-        if let_statement.name.string() != expected_identifier {
-            panic!("incorrect identifier for let statement");
+
+        match stmt {
+            Statement::Let(let_statement) => {
+                if let_statement.name.string() != expected_identifier {
+                    panic!("incorrect identifier for let statement");
+                }
+            }
+            _ => panic!("statement is not a LetStatement"),
         }
     }
 
     fn test_const_statement(stmt: &Statement, expected_identifier: &str) {
         if stmt.token_literal() != "const" {
             panic!(
-                "statement.token_literal not const: {}",
+                "statement.token_literal not 'const': {}",
                 stmt.token_literal()
             );
         }
-        if !stmt.as_any().is::<ConstStatement>() {
-            panic!("statement is not a ConstStatement");
-        }
-        let const_statement = stmt.as_any().downcast_ref::<ConstStatement>().unwrap();
-        if const_statement.name.string() != expected_identifier {
-            panic!("incorrect identifier for let statement");
+
+        match stmt {
+            Statement::Const(const_statement) => {
+                if const_statement.name.string() != expected_identifier {
+                    panic!("incorrect identifier for const statement");
+                }
+            }
+            _ => panic!("statement is not a ConstStatement"),
         }
     }
 
     fn test_return_statement(stmt: &Statement) {
         if stmt.token_literal() != "return" {
             panic!(
-                "statement.token_literal is not return: {}",
+                "statement.token_literal is not 'return': {}",
                 stmt.token_literal()
             );
         }
-        if !stmt.as_any().is::<ReturnStatement>() {
+
+        if let Statement::Return(_) = stmt {
+        } else {
             panic!("statement is not a ReturnStatement");
         }
     }
@@ -892,47 +908,50 @@ mod tests {
                 test_boolean_literal(expr, value);
             }
             ExpectedValue::Ident(value) => {
-                test_identifier(expr, value);
+                test_identifier(expr, &value);
             }
         }
     }
 
     fn test_integer_literal(expr: &Expression, value: i64) {
-        if !expr.as_any().is::<IntegerLiteral>() {
-            panic!("expression is not an integer literal");
-        }
-        let int_lit = expr.as_any().downcast_ref::<IntegerLiteral>().unwrap();
-        if int_lit.value != value as usize {
-            panic!(
-                "integer literal value incorrect, expected: {}, got: {}",
-                value, int_lit.value,
-            )
+        match expr {
+            Expression::Integer(int_lit) => {
+                if int_lit.value != value {
+                    panic!(
+                        "integer literal value incorrect, expected: {}, got: {}",
+                        value, int_lit.value,
+                    );
+                }
+            }
+            _ => panic!("expression is not an integer literal"),
         }
     }
 
     fn test_boolean_literal(expr: &Expression, value: bool) {
-        if !expr.as_any().is::<Boolean>() {
-            panic!("expression is not a boolean");
-        }
-        let boool = expr.as_any().downcast_ref::<Boolean>().unwrap();
-        if boool.value != value {
-            panic!(
-                "boolean value incorrect, expected: {}, got: {}",
-                value, boool.value,
-            )
+        match expr {
+            Expression::Boolean(boool) => {
+                if boool.value != value {
+                    panic!(
+                        "boolean value incorrect, expected: {}, got: {}",
+                        value, boool.value,
+                    );
+                }
+            }
+            _ => panic!("expression is not a boolean"),
         }
     }
 
-    fn test_identifier(expr: &Expression, value: String) {
-        if !expr.as_any().is::<Identifier>() {
-            panic!("expression is not a identifier");
-        }
-        let ident = expr.as_any().downcast_ref::<Identifier>().unwrap();
-        if ident.value != value {
-            panic!(
-                "identifier value incorrect, expected: {}, got: {}",
-                value, ident.value,
-            )
+    fn test_identifier(expr: &Expression, value: &str) {
+        match expr {
+            Expression::Identifier(ident) => {
+                if ident.value != value {
+                    panic!(
+                        "identifier value incorrect, expected: {}, got: {}",
+                        value, ident.value,
+                    );
+                }
+            }
+            _ => panic!("expression is not an identifier"),
         }
     }
 
@@ -942,11 +961,10 @@ mod tests {
         operator: &str,
         right: ExpectedValue,
     ) {
-        if !expr.as_any().is::<InfixExpression>() {
-            panic!("expression is not an infix expression");
-        }
-        let infix = expr.as_any().downcast_ref::<InfixExpression>().unwrap();
-
+        let infix = match expr {
+            Expression::Infix(infix_expr) => infix_expr,
+            _ => panic!("expression is not an infix expression"),
+        };
         match left {
             ExpectedValue::Ident(left_data) => {
                 test_literal_expression(&infix.left, ExpectedValue::Ident(left_data))
@@ -958,14 +976,12 @@ mod tests {
                 test_literal_expression(&infix.left, ExpectedValue::Bool(left_data))
             }
         }
-
         if infix.operator != operator {
             panic!(
                 "infix.operator incorrect, got: {}, expected: {}",
                 infix.operator, operator
             );
         }
-
         match right {
             ExpectedValue::Ident(right_data) => {
                 test_literal_expression(&infix.right, ExpectedValue::Ident(right_data));
@@ -1011,7 +1027,10 @@ mod tests {
             let stmt = &program.statements[0];
             test_let_statement(stmt, expected_identifier);
 
-            let ls = stmt.as_any().downcast_ref::<LetStatement>().unwrap();
+            let ls = match stmt {
+                Statement::Let(ls) => ls,
+                _ => panic!("Expected a LetStatement"),
+            };
             test_literal_expression(&ls.value, expected_value);
         }
     }
@@ -1048,8 +1067,12 @@ mod tests {
             let stmt = &program.statements[0];
             test_const_statement(stmt, expected_identifier);
 
-            let ls = stmt.as_any().downcast_ref::<ConstStatement>().unwrap();
-            test_literal_expression(&ls.value, expected_value);
+            let cs = match stmt {
+                Statement::Const(cs) => cs,
+                _ => panic!("Expected a ConstStatemnent"),
+            };
+
+            test_literal_expression(&cs.value, expected_value);
         }
     }
 
@@ -1080,7 +1103,11 @@ mod tests {
             let stmt = &program.statements[0];
             test_return_statement(stmt);
 
-            let rs = stmt.as_any().downcast_ref::<ReturnStatement>().unwrap();
+            let rs = match stmt {
+                Statement::Return(rs) => rs,
+                _ => panic!("Expected a ReturnStatement"),
+            };
+
             test_literal_expression(&rs.return_value, expected_value);
         }
     }
@@ -1101,14 +1128,19 @@ mod tests {
         );
 
         let stmt = &program.statements[0];
-        if !stmt.as_any().is::<ExpressionStatement>() {
-            panic!("expression is not an expression statement");
-        }
-        let exp_stmt = stmt.as_any().downcast_ref::<ExpressionStatement>().unwrap();
-        if let Some(identifier) = &exp_stmt.expression.as_any().downcast_ref::<Identifier>() {
-            if identifier.value != "foobar" {}
-        } else {
-            panic!("expression statement's expression is not an identifier");
+        let exp_stmt = match stmt {
+            Statement::Expression(exp_stmt) => exp_stmt,
+            _ => panic!("statement is not an ExpressionStatement"),
+        };
+
+        match &exp_stmt.expression {
+            Expression::Identifier(identifier) => {
+                assert_eq!(
+                    identifier.value, "foobar",
+                    "identifier value is not 'foobar'"
+                );
+            }
+            _ => panic!("expression statement's expression is not an identifier"),
         }
     }
 
@@ -1128,28 +1160,21 @@ mod tests {
         );
 
         let stmt = &program.statements[0];
-        if !stmt.as_any().is::<ExpressionStatement>() {
-            panic!(
-                "statement is not an expression statement: {:?}, {:?}",
-                stmt.as_ref().token_literal(),
-                stmt.as_ref().string()
-            );
-        }
-        let expr_stmt = stmt.as_any().downcast_ref::<ExpressionStatement>().unwrap();
+        let expr_stmt = match stmt {
+            Statement::Expression(expr_stmt) => expr_stmt,
+            _ => panic!("statement is not an ExpressionStatement"),
+        };
 
-        if let Some(int_lit) = expr_stmt
-            .expression
-            .as_any()
-            .downcast_ref::<IntegerLiteral>()
-        {
-            if int_lit.value != 5 {
-                panic!(
-                    "integer literal's value incorrect, expected: {}, got: {}",
-                    5, int_lit.value
-                );
+        match &expr_stmt.expression {
+            Expression::Integer(int_lit) => {
+                if int_lit.value != 5 {
+                    panic!(
+                        "integer literal's value incorrect, expected: {}, got: {}",
+                        5, int_lit.value
+                    );
+                }
             }
-        } else {
-            panic!("expression statement is not an integer literal");
+            _ => panic!("expression statement is not an integer literal"),
         }
     }
 
@@ -1162,7 +1187,7 @@ mod tests {
             ("!false", "!", ExpectedValue::Bool(false)),
         ];
 
-        for (input, operator, integer_value) in prefix_tests {
+        for (input, operator, expected_value) in prefix_tests {
             let lexer = Lexer::new(input.to_string());
             let mut parser = Parser::new(lexer);
             let program = parser.parse_program();
@@ -1176,25 +1201,22 @@ mod tests {
             );
 
             let stmt = &program.statements[0];
-            if !stmt.as_any().is::<ExpressionStatement>() {
-                panic!("statement is not an expression statement");
-            }
-            let expr_stmt = stmt.as_any().downcast_ref::<ExpressionStatement>().unwrap();
+            let expr_stmt = match stmt {
+                Statement::Expression(expr_stmt) => expr_stmt,
+                _ => panic!("statement is not an ExpressionStatement"),
+            };
 
-            if let Some(prefix_expr) = expr_stmt
-                .expression
-                .as_any()
-                .downcast_ref::<PrefixExpression>()
-            {
-                assert_eq!(
-                    prefix_expr.operator, operator,
-                    "expr.Operator is not '{}'. Got: '{}'",
-                    operator, prefix_expr.operator
-                );
+            match &expr_stmt.expression {
+                Expression::Prefix(prefix_expr) => {
+                    assert_eq!(
+                        prefix_expr.operator, operator,
+                        "expr.Operator is not '{}'. Got: '{}'",
+                        operator, prefix_expr.operator
+                    );
 
-                test_literal_expression(&prefix_expr.right, integer_value);
-            } else {
-                panic!("stmt is not a prefix expression");
+                    test_literal_expression(&prefix_expr.right, expected_value);
+                }
+                _ => panic!("stmt is not a PrefixExpression"),
             }
         }
     }
@@ -1279,21 +1301,22 @@ mod tests {
             );
 
             let stmt = &program.statements[0];
-            if !stmt.as_any().is::<ExpressionStatement>() {
-                panic!("statement is not an expression statement");
-            }
-            let expr_stmt = stmt.as_any().downcast_ref::<ExpressionStatement>().unwrap();
+            let expr_stmt = match stmt {
+                Statement::Expression(expr_stmt) => expr_stmt,
+                _ => panic!("statement is not an ExpressionStatement"),
+            };
 
-            if let Some(infix_expr) = expr_stmt
-                .expression
-                .as_any()
-                .downcast_ref::<InfixExpression>()
-            {
-                assert_eq!(infix_expr.operator, operator);
-                test_literal_expression(&infix_expr.left, left_value);
-                test_literal_expression(&infix_expr.right, right_value);
-            } else {
-                panic!("stmt is not an infix expression");
+            match &expr_stmt.expression {
+                Expression::Infix(infix_expr) => {
+                    assert_eq!(
+                        infix_expr.operator, operator,
+                        "Operator is not '{}'. Got: '{}'",
+                        operator, infix_expr.operator
+                    );
+                    test_literal_expression(&infix_expr.left, left_value);
+                    test_literal_expression(&infix_expr.right, right_value);
+                }
+                _ => panic!("stmt is not an InfixExpression"),
             }
         }
     }
@@ -1418,19 +1441,20 @@ mod tests {
             );
 
             let stmt = &program.statements[0];
-            if !stmt.as_any().is::<ExpressionStatement>() {
-                panic!("statement is not an expression statement");
-            }
-            let expr_stmt = stmt.as_any().downcast_ref::<ExpressionStatement>().unwrap();
+            let expr_stmt = match stmt {
+                Statement::Expression(expr_stmt) => expr_stmt,
+                _ => panic!("statement is not an ExpressionStatement"),
+            };
 
-            if let Some(boolean) = expr_stmt.expression.as_any().downcast_ref::<Boolean>() {
-                assert_eq!(
-                    boolean.value, expected_bool,
-                    "boolean.Value not {}. Got: {}",
-                    expected_bool, boolean.value
-                );
-            } else {
-                panic!("statement is not a boolean");
+            match &expr_stmt.expression {
+                Expression::Boolean(boolean) => {
+                    assert_eq!(
+                        boolean.value, expected_bool,
+                        "boolean value not {}. Got: {}",
+                        expected_bool, boolean.value
+                    );
+                }
+                _ => panic!("expression is not a boolean"),
             }
         }
     }
@@ -1452,19 +1476,15 @@ mod tests {
         );
 
         let stmt = &program.statements[0];
-        if !stmt.as_any().is::<ExpressionStatement>() {
-            panic!("statement is not an expression statement");
-        }
-        let expr_stmt = stmt.as_any().downcast_ref::<ExpressionStatement>().unwrap();
+        let expr_stmt = match stmt {
+            Statement::Expression(expr_stmt) => expr_stmt,
+            _ => panic!("statement is not an ExpressionStatement"),
+        };
 
-        if !expr_stmt.expression.as_any().is::<IfExpression>() {
-            panic!("statement is not an if expression");
-        }
-        let if_expr = expr_stmt
-            .expression
-            .as_any()
-            .downcast_ref::<IfExpression>()
-            .unwrap();
+        let if_expr = match &expr_stmt.expression {
+            Expression::If(if_expr) => if_expr,
+            _ => panic!("statement is not an if expression"),
+        };
 
         test_infix_expression(
             &if_expr.condition,
@@ -1480,21 +1500,14 @@ mod tests {
             if_expr.consequence.statements.len()
         );
 
-        if !if_expr.consequence.statements[0]
-            .as_any()
-            .is::<ExpressionStatement>()
-        {
-            panic!("if expression not an expression statement");
-        }
+        let consequence_statement = match &if_expr.consequence.statements[0] {
+            Statement::Expression(expr_stmt) => expr_stmt,
+            _ => panic!("Consequence statement is not an ExpressionStatement"),
+        };
 
-        let consequenc_statement = if_expr.consequence.statements[0]
-            .as_any()
-            .downcast_ref::<ExpressionStatement>()
-            .unwrap();
+        test_identifier(&consequence_statement.expression, "x");
 
-        test_identifier(&consequenc_statement.expression, String::from("x"));
-
-        if if_expr.alternative.as_any().is::<ZeroValueStatement>() {
+        if !if_expr.alternative.statements.is_empty() {
             panic!("the if expression's alternative was not nil");
         }
     }
@@ -1516,26 +1529,15 @@ mod tests {
         );
 
         let stmt = &program.statements[0];
-        if !stmt.as_any().is::<ExpressionStatement>() {
-            panic!("statement is not an expression statement");
-        }
-        let expr_stmt = stmt.as_any().downcast_ref::<ExpressionStatement>().unwrap();
+        let expr_stmt = match stmt {
+            Statement::Expression(expr_stmt) => expr_stmt,
+            _ => panic!("statement is not an ExpressionStatement"),
+        };
 
-        if !expr_stmt.expression.as_any().is::<IfExpression>() {
-            panic!("statement is not an if expression");
-        }
-        let if_expr = expr_stmt
-            .expression
-            .as_any()
-            .downcast_ref::<IfExpression>()
-            .unwrap();
-
-        test_infix_expression(
-            &if_expr.condition,
-            ExpectedValue::Ident(String::from("x")),
-            "<",
-            ExpectedValue::Ident(String::from("y")),
-        );
+        let if_expr = match &expr_stmt.expression {
+            Expression::If(if_expr) => if_expr,
+            _ => panic!("statement is not an if expression"),
+        };
 
         test_infix_expression(
             &if_expr.condition,
@@ -1551,12 +1553,12 @@ mod tests {
             if_expr.consequence.statements.len()
         );
 
-        let consequence_statement = if_expr.consequence.statements[0]
-            .as_any()
-            .downcast_ref::<ExpressionStatement>()
-            .unwrap();
+        let consequence_statement = match &if_expr.consequence.statements[0] {
+            Statement::Expression(expr_stmt) => expr_stmt,
+            _ => panic!("Consequence statement is not an ExpressionStatement"),
+        };
 
-        test_identifier(&consequence_statement.expression, String::from("x"));
+        test_identifier(&consequence_statement.expression, "x");
 
         assert_eq!(
             if_expr.alternative.statements.len(),
@@ -1565,12 +1567,12 @@ mod tests {
             if_expr.alternative.statements.len()
         );
 
-        let alternative_statement = if_expr.alternative.statements[0]
-            .as_any()
-            .downcast_ref::<ExpressionStatement>()
-            .unwrap();
+        let alternative_statement = match &if_expr.alternative.statements[0] {
+            Statement::Expression(expr_stmt) => expr_stmt,
+            _ => panic!("Alternative statement is not an ExpressionStatement"),
+        };
 
-        test_identifier(&alternative_statement.expression, String::from("y"));
+        test_identifier(&alternative_statement.expression, "y");
     }
 
     #[test]
@@ -1590,19 +1592,15 @@ mod tests {
         );
 
         let stmt = &program.statements[0];
-        if !stmt.as_any().is::<ExpressionStatement>() {
-            panic!("statement is not an expression statement");
-        }
-        let expr_stmt = stmt.as_any().downcast_ref::<ExpressionStatement>().unwrap();
+        let expr_stmt = match stmt {
+            Statement::Expression(expr_stmt) => expr_stmt,
+            _ => panic!("statement is not an ExpressionStatement"),
+        };
 
-        if !expr_stmt.expression.as_any().is::<FunctionLiteral>() {
-            panic!("statement is not a function literal");
-        }
-        let function = expr_stmt
-            .expression
-            .as_any()
-            .downcast_ref::<FunctionLiteral>()
-            .unwrap();
+        let function = match &expr_stmt.expression {
+            Expression::Function(func) => func,
+            _ => panic!("expression is not a function literal"),
+        };
 
         assert_eq!(
             function.parameters.len(),
@@ -1611,11 +1609,8 @@ mod tests {
             function.parameters.len()
         );
 
-        let identifier_1 = function.parameters[0].value.clone();
-        let identifier_2 = function.parameters[1].value.clone();
-
-        assert_eq!(identifier_1, "x");
-        assert_eq!(identifier_2, "y");
+        test_identifier(&Expression::Identifier(function.parameters[0]), "x");
+        test_identifier(&Expression::Identifier(function.parameters[1]), "y");
 
         assert_eq!(
             function.body.statements.len(),
@@ -1624,17 +1619,13 @@ mod tests {
             function.body.statements.len()
         );
 
-        let body_stmt = &function.body.statements[0];
-        if !body_stmt.as_any().is::<ExpressionStatement>() {
-            panic!("body statement is not an expression statement");
-        }
-        let body = body_stmt
-            .as_any()
-            .downcast_ref::<ExpressionStatement>()
-            .unwrap();
+        let body_stmt = match &function.body.statements[0] {
+            Statement::Expression(body_expr_stmt) => body_expr_stmt,
+            _ => panic!("body statement is not an ExpressionStatement"),
+        };
 
         test_infix_expression(
-            &body.expression,
+            &body_stmt.expression,
             ExpectedValue::Ident(String::from("x")),
             "+",
             ExpectedValue::Ident(String::from("y")),
@@ -1664,19 +1655,15 @@ mod tests {
             );
 
             let stmt = &program.statements[0];
-            if !stmt.as_any().is::<ExpressionStatement>() {
-                panic!("statement is not an expression statement");
-            }
-            let expr_stmt = stmt.as_any().downcast_ref::<ExpressionStatement>().unwrap();
+            let expr_stmt = match stmt {
+                Statement::Expression(expr_stmt) => expr_stmt,
+                _ => panic!("statement is not an ExpressionStatement"),
+            };
 
-            if !expr_stmt.expression.as_any().is::<FunctionLiteral>() {
-                panic!("statement is not a function literal");
-            }
-            let function = expr_stmt
-                .expression
-                .as_any()
-                .downcast_ref::<FunctionLiteral>()
-                .unwrap();
+            let function = match &expr_stmt.expression {
+                Expression::Function(func) => func,
+                _ => panic!("expression is not a function literal"),
+            };
 
             assert_eq!(
                 function.parameters.len(),
@@ -1688,7 +1675,11 @@ mod tests {
 
             for (i, &expected_param) in expected_params.iter().enumerate() {
                 let param = &function.parameters[i];
-                assert_eq!(param.value, expected_param);
+                assert_eq!(
+                    param.value, expected_param,
+                    "parameter {} does not match expected value",
+                    i
+                );
             }
         }
     }
@@ -1710,21 +1701,20 @@ mod tests {
         );
 
         let stmt = &program.statements[0];
-        if !stmt.as_any().is::<ExpressionStatement>() {
-            panic!("stmt is not an expression statement");
-        }
-        let expr_stmt = stmt.as_any().downcast_ref::<ExpressionStatement>().unwrap();
+        let expr_stmt = match stmt {
+            Statement::Expression(expr_stmt) => expr_stmt,
+            _ => panic!("stmt is not an expression statement"),
+        };
+        let call_expr = match &expr_stmt.expression {
+            Expression::Call(call_expr) => call_expr,
+            _ => panic!("stmt.Expression is not a CallExpression"),
+        };
+        let call_expr_function = match &*call_expr.function {
+            Expression::Identifier(identifier) => identifier,
+            _ => panic!("Function expression is not an identifier"),
+        };
 
-        if !expr_stmt.expression.as_any().is::<CallExpression>() {
-            panic!("stmt.Expression is not a CallExpression");
-        }
-        let call_expr = expr_stmt
-            .expression
-            .as_any()
-            .downcast_ref::<CallExpression>()
-            .unwrap();
-
-        test_identifier(&call_expr.func, String::from("add"));
+        test_identifier(&Expression::Identifier(*call_expr_function), "add");
 
         assert_eq!(
             call_expr.arguments.len(),
@@ -1775,21 +1765,20 @@ mod tests {
             );
 
             let stmt = &program.statements[0];
-            if !stmt.as_any().is::<ExpressionStatement>() {
-                panic!("stmt is not an expression statement");
-            }
-            let expr_stmt = stmt.as_any().downcast_ref::<ExpressionStatement>().unwrap();
+            let expr_stmt = match stmt {
+                Statement::Expression(expr_stmt) => expr_stmt,
+                _ => panic!("stmt is not an expression statement"),
+            };
+            let call_expr = match &expr_stmt.expression {
+                Expression::Call(call_expr) => call_expr,
+                _ => panic!("expression statement's expression is not a call expression"),
+            };
+            let call_expr_function = match &*call_expr.function {
+                Expression::Identifier(identifier) => identifier,
+                _ => panic!("Function expression is not an identifier"),
+            };
 
-            if !expr_stmt.expression.as_any().is::<CallExpression>() {
-                panic!("expression statement's expression is not a call expression");
-            }
-            let call_expr = expr_stmt
-                .expression
-                .as_any()
-                .downcast_ref::<CallExpression>()
-                .unwrap();
-
-            test_identifier(&call_expr.func, expected_ident.to_string());
+            test_identifier(&Expression::Identifier(*call_expr_function), expected_ident);
 
             assert_eq!(
                 call_expr.arguments.len(),
@@ -1829,19 +1818,15 @@ mod tests {
         );
 
         let stmt = &program.statements[0];
-        if !stmt.as_any().is::<ExpressionStatement>() {
-            panic!("stmt is not an expression statement");
-        }
-        let expr_stmt = stmt.as_any().downcast_ref::<ExpressionStatement>().unwrap();
+        let expr_stmt = match stmt {
+            Statement::Expression(expr_stmt) => expr_stmt,
+            _ => panic!("stmt is not an expression statement"),
+        };
 
-        if !expr_stmt.expression.as_any().is::<StringLiteral>() {
-            panic!("expression statement's expression is not a string literal");
-        }
-        let string_literal = expr_stmt
-            .expression
-            .as_any()
-            .downcast_ref::<StringLiteral>()
-            .unwrap();
+        let string_literal = match &expr_stmt.expression {
+            Expression::String(string_literal) => string_literal,
+            _ => panic!("expression statement's expression is not a string literal"),
+        };
 
         assert_eq!(
             string_literal.value, "hello world",
@@ -1867,19 +1852,15 @@ mod tests {
         );
 
         let stmt = &program.statements[0];
-        if !stmt.as_any().is::<ExpressionStatement>() {
-            panic!("stmt is not an expression statement");
-        }
-        let expr_stmt = stmt.as_any().downcast_ref::<ExpressionStatement>().unwrap();
+        let expr_stmt = match stmt {
+            Statement::Expression(expr_stmt) => expr_stmt,
+            _ => panic!("stmt is not an expression statement"),
+        };
 
-        if !expr_stmt.expression.as_any().is::<ArrayLiteral>() {
-            panic!("expression statement's expression is not an array literal");
-        }
-        let array_literal = expr_stmt
-            .expression
-            .as_any()
-            .downcast_ref::<ArrayLiteral>()
-            .unwrap();
+        let array_literal = match &expr_stmt.expression {
+            Expression::Array(array_literal) => array_literal,
+            _ => panic!("expression statement's expression is not an array literal"),
+        };
 
         assert_eq!(
             array_literal.elements.len(),
