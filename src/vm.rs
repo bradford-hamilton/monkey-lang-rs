@@ -6,7 +6,6 @@ use crate::frame::Frame;
 use crate::object::{ClosureObject, CompiledFuncObject, Object};
 use crate::object::{HashKey, HashPair};
 use std::collections::HashMap;
-use std::rc::Rc;
 
 // Integer defining the size of our stack
 const STACK_SIZE: i64 = 2048;
@@ -17,16 +16,16 @@ const GLOBALS_SIZE: i64 = 65536;
 
 // Defines the virtual machine. It holds the constant pool, instructions, a stack,
 // and an integer (index) that points to the next free slot in the stack.
-pub struct VirtualMachine {
-    constants: Vec<Object>,
-    stack: Vec<Object>,
+pub struct VirtualMachine<'a> {
+    constants: Vec<Object<'a>>,
+    stack: Vec<Object<'a>>,
     sp: u64,
-    globals: Vec<Object>,
-    frames: Vec<Frame>,
+    globals: Vec<Object<'a>>,
+    frames: Vec<Frame<'a>>,
     frames_index: usize,
 }
 
-impl VirtualMachine {
+impl<'a> VirtualMachine<'a> {
     pub fn new(bytecode: Bytecode) -> Self {
         let main_func = CompiledFuncObject {
             instructions: bytecode.instructions,
@@ -147,7 +146,7 @@ impl VirtualMachine {
                     if global_index >= self.globals.len() {
                         panic!("global index {} is out of bounds", global_index);
                     }
-                    self.push(&self.globals[global_index]);
+                    self.push(self.globals[global_index]);
                 }
 
                 Opcode::OpArray => {
@@ -207,7 +206,7 @@ impl VirtualMachine {
                     let frame = self.current_frame();
                     let base_pointer = frame.base_pointer as usize;
 
-                    self.stack[base_pointer + local_index] = Rc::clone(&self.pop());
+                    self.stack[base_pointer + local_index] = self.pop();
                 }
 
                 Opcode::OpGetLocal => {
@@ -217,7 +216,7 @@ impl VirtualMachine {
                     let frame = self.current_frame();
                     let base_pointer = frame.base_pointer as usize;
 
-                    let local_var = Rc::clone(&self.stack[base_pointer + local_index]);
+                    let local_var = self.stack[base_pointer + local_index];
                     self.push(local_var);
                 }
 
@@ -228,7 +227,7 @@ impl VirtualMachine {
                     let definition = BUILTINS[builtin_index].clone();
                     let builtin = definition.1;
 
-                    self.push(Rc::new(builtin));
+                    self.push(builtin);
                 }
 
                 Opcode::OpClosure => {
@@ -462,7 +461,7 @@ impl VirtualMachine {
         let elements = self.stack[start_index..end_index]
             .iter()
             .cloned()
-            .collect::<Vec<Object>>();
+            .collect::<Vec<&Object>>();
 
         Object::Array(elements)
     }
@@ -472,7 +471,7 @@ impl VirtualMachine {
 
         for i in (start_index..end_index).step_by(2) {
             let key = &self.stack[i];
-            let value = self.stack[i + 1].clone();
+            let value = &self.stack[i + 1].clone();
 
             let hash_key = match key {
                 Object::Str(string_obj) => string_obj.hash_key(),
@@ -481,13 +480,7 @@ impl VirtualMachine {
                 _ => panic!("unusable as a hash key: {}", key),
             };
 
-            pairs.insert(
-                hash_key,
-                HashPair {
-                    key: key.clone(),
-                    value,
-                },
-            );
+            pairs.insert(hash_key, HashPair { key, value });
         }
 
         Object::Hash(pairs)
@@ -544,7 +537,7 @@ impl VirtualMachine {
                     cl.func.num_params, num_args
                 );
             }
-            let frame = Frame::new(cl.clone(), self.sp as i64 - num_args as i64);
+            let frame = Frame::new(**cl, self.sp as i64 - num_args as i64);
             self.push_frame(frame);
             self.sp = frame.base_pointer as u64 + cl.func.num_locals as u64;
         } else {
@@ -556,11 +549,11 @@ impl VirtualMachine {
         if let Object::CompiledFunc(ref function) = self.constants[const_index] {
             let mut free = Vec::with_capacity(num_free);
             for i in 0..num_free {
-                free.push(Rc::clone(&self.stack[self.sp as usize - num_free + i]));
+                free.push(self.stack[self.sp as usize - num_free + i]);
             }
             self.sp -= num_free as u64;
-            self.push(Object::Closure(ClosureObject {
-                func: function.clone(),
+            self.push(Object::Closure(&ClosureObject {
+                func: **function,
                 free,
             }));
         } else {
@@ -601,16 +594,16 @@ fn is_truthy(obj: &Object) -> bool {
     }
 }
 
-fn native_bool_to_boolean_obj(input: bool) -> Object {
+fn native_bool_to_boolean_obj<'a>(input: bool) -> Object<'a> {
     Object::Boolean(input)
 }
 
 fn coerce_obj_to_native_bool(object: &Object) -> bool {
     match object {
         Object::Boolean(value) => *value,
-        Object::Str(string_obj) => !string_obj.value.is_empty(),
-        Object::Integer(integer_obj) => integer_obj.value != 0,
-        Object::Array(array_obj) => !array_obj.elements.is_empty(),
+        Object::Str(string_obj) => !string_obj.is_empty(),
+        Object::Integer(integer_obj) => *integer_obj != 0,
+        Object::Array(array_obj) => !array_obj.is_empty(),
         Object::Hash(hash_obj) => !hash_obj.pairs.is_empty(),
         Object::Null => false,
         // Default case for other object types
@@ -715,9 +708,9 @@ mod tests {
     fn test_integer_object(expected: i64, actual: &Object) {
         if let Object::Integer(result) = actual {
             assert_eq!(
-                result.value, expected,
+                *result, expected,
                 "object has wrong value. Expected: {}. Got: {}",
-                expected, result.value
+                expected, result
             );
         } else {
             panic!("object is not an Integer. Got: {:?}", actual);
@@ -727,9 +720,9 @@ mod tests {
     fn test_boolean_object(expected: bool, actual: &Object) {
         if let Object::Boolean(result) = actual {
             assert_eq!(
-                result.value, expected,
+                *result, expected,
                 "object has wrong value. Expected: {}, Got: {}",
-                expected, result.value
+                expected, result
             );
         } else {
             panic!("object is not Boolean. Got: {:?}", actual);
@@ -739,9 +732,9 @@ mod tests {
     fn test_string_object(expected: String, actual: &Object) {
         if let Object::Str(result) = actual {
             assert_eq!(
-                &result.value, &expected,
+                *result, expected,
                 "Object has wrong value. Expected: {:?}, Got: {:?}",
-                expected, result.value
+                expected, result
             );
         } else {
             panic!("Object is not a String. Got: {:?}", actual);

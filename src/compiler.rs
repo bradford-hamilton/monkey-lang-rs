@@ -1,8 +1,7 @@
 use crate::ast::{
-    ArrayLiteral, BlockStatement, Boolean, CallExpression, ConstStatement, Expression,
-    ExpressionKey, ExpressionStatement, FunctionLiteral, HashLiteral, Identifier, IfExpression,
-    IndexExpression, InfixExpression, IntegerLiteral, LetStatement, Node, PrefixExpression,
-    ReturnStatement, RootNode, StringLiteral,
+    ArrayLiteral, BlockStatement, Boolean, CallExpression, ConstStatement, ExpressionStatement,
+    FunctionLiteral, HashLiteral, Identifier, IfExpression, IndexExpression, InfixExpression,
+    IntegerLiteral, LetStatement, Node, PrefixExpression, ReturnStatement, RootNode, StringLiteral,
 };
 use crate::builtins::BUILTINS;
 use crate::bytecode::make_instruction;
@@ -53,7 +52,7 @@ pub struct Compiler<'a> {
     scope_index: i64,
 }
 
-impl Compiler {
+impl<'a> Compiler<'a> {
     pub fn new() -> Self {
         let main_scope = CompilationScope {
             instructions: Instructions::new(vec![]),
@@ -215,7 +214,7 @@ impl Compiler {
     }
 
     // TODO: PostfixExpression after implementing them.
-    pub fn compile(&mut self, node: &dyn Node) -> Result<(), String> {
+    pub fn compile(&mut self, node: &Node) -> Result<(), String> {
         if let Some(root_node) = node.as_any().downcast_ref::<RootNode>() {
             for statement in &root_node.statements {
                 self.compile(statement.as_node())?;

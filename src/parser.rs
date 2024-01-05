@@ -1,13 +1,12 @@
 use crate::ast::{
     ArrayLiteral, BlockStatement, Boolean, CallExpression, ConstStatement, Expression,
-    ExpressionKey, ExpressionStatement, FunctionLiteral, HashLiteral, Identifier, IfExpression,
-    IndexExpression, InfixExpression, IntegerLiteral, LetStatement, Node, PrefixExpression,
-    ReturnStatement, RootNode, Statement, StringLiteral, ZeroValueExpression, ZeroValueStatement,
+    ExpressionStatement, FunctionLiteral, HashLiteral, Identifier, IfExpression, IndexExpression,
+    InfixExpression, IntegerLiteral, LetStatement, PrefixExpression, ReturnStatement, RootNode,
+    Statement, StringLiteral, ZeroValueExpression, ZeroValueStatement,
 };
 use crate::lexer::Lexer;
 use crate::token::{Token, TokenType};
 use lazy_static::lazy_static;
-use std::cell::RefCell;
 use std::collections::HashMap;
 
 /// Operator precedence table.
@@ -60,9 +59,9 @@ lazy_static! {
 }
 
 /// Prefix, infix, and postfix function type definitions.
-type PrefixParseFunc = fn(parser: &mut Parser) -> Box<dyn Expression>;
-type InfixParseFunc = fn(parser: &mut Parser, expr: Box<dyn Expression>) -> Box<dyn Expression>;
-type PostfixParseFunc = fn(parser: &mut Parser) -> Box<dyn Expression>;
+type PrefixParseFunc = fn(parser: &mut Parser) -> Expression;
+type InfixParseFunc = fn(parser: &mut Parser, expr: Expression) -> Expression;
+type PostfixParseFunc = fn(parser: &mut Parser) -> Expression;
 
 /// Parser holds all the resources needed to parse a monkey program.
 pub struct Parser {
@@ -212,7 +211,7 @@ impl Parser {
         false
     }
 
-    fn parse_expression(&mut self, precedence: OpPrecedence) -> Option<Box<dyn Expression>> {
+    fn parse_expression(&mut self, precedence: OpPrecedence) -> Option<Expression> {
         let prefix = match self.prefix_parse_funcs.get(&self.current_token.token_type) {
             Some(&func) => func,
             _ => {
@@ -239,8 +238,8 @@ impl Parser {
         Some(left_expr)
     }
 
-    fn parse_expression_list(&mut self, end: TokenType) -> Vec<Box<dyn Expression>> {
-        let mut list: Vec<Box<dyn Expression>> = vec![];
+    fn parse_expression_list(&mut self, end: TokenType) -> Vec<Expression> {
+        let mut list: Vec<Expression> = vec![];
 
         if self.peek_token_type_is(end) {
             self.next_token();
@@ -257,7 +256,7 @@ impl Parser {
                     self.current_token.line, self.current_token.literal
                 );
                 self.errors.push(msg);
-                Box::new(ZeroValueExpression {})
+                ZeroValueExpression {}
             }
         };
 
@@ -310,7 +309,7 @@ impl Parser {
         block
     }
 
-    fn parse_statement(&mut self) -> Box<dyn Statement> {
+    fn parse_statement(&mut self) -> Statement {
         match self.current_token.token_type {
             TokenType::Let => parse_let_statement(self),
             TokenType::Const => parse_const_statement(self),
@@ -368,7 +367,7 @@ impl Parser {
     }
 }
 
-fn parse_identifier(parser: &mut Parser) -> Box<dyn Expression> {
+fn parse_identifier(parser: &mut Parser) -> Expression {
     let contains_key = parser
         .postfix_parse_funcs
         .contains_key(&parser.peek_token.token_type);
@@ -385,7 +384,7 @@ fn parse_identifier(parser: &mut Parser) -> Box<dyn Expression> {
     })
 }
 
-fn parse_infix_expr(parser: &mut Parser, left: Box<dyn Expression>) -> Box<dyn Expression> {
+fn parse_infix_expr(parser: &mut Parser, left: Expression) -> Expression {
     let mut expr = InfixExpression {
         token: parser.current_token.clone(),
         operator: parser.current_token.literal.clone(),
@@ -404,26 +403,26 @@ fn parse_infix_expr(parser: &mut Parser, left: Box<dyn Expression>) -> Box<dyn E
                 parser.current_token.line, parser.current_token.literal,
             );
             parser.errors.push(msg);
-            Box::new(ZeroValueExpression {})
+            ZeroValueExpression {}
         }
     };
 
-    Box::new(expr)
+    expr
 }
 
-fn parse_call_expr(parser: &mut Parser, func: Box<dyn Expression>) -> Box<dyn Expression> {
-    Box::new(CallExpression {
+fn parse_call_expr(parser: &mut Parser, func: Expression) -> Expression {
+    CallExpression {
         token: parser.current_token.clone(),
-        func,
+        function: func,
         arguments: parser.parse_expression_list(TokenType::RightParen),
-    })
+    }
 }
 
-fn parse_index_expr(parser: &mut Parser, left: Box<dyn Expression>) -> Box<dyn Expression> {
+fn parse_index_expr(parser: &mut Parser, left: Expression) -> Expression {
     let mut expr = IndexExpression {
         token: parser.current_token.clone(),
         left,
-        index: Box::new(ZeroValueExpression {}),
+        index: ZeroValueExpression {},
     };
 
     parser.next_token();
@@ -436,22 +435,22 @@ fn parse_index_expr(parser: &mut Parser, left: Box<dyn Expression>) -> Box<dyn E
                 parser.current_token.line, parser.current_token.literal,
             );
             parser.errors.push(msg);
-            Box::new(ZeroValueExpression {})
+            ZeroValueExpression {}
         }
     };
 
     if !parser.expect_peek_type(TokenType::RightBracket) {
-        return Box::new(ZeroValueExpression {});
+        return ZeroValueExpression {};
     }
 
-    Box::new(expr)
+    expr
 }
 
-fn parse_prefix_expr(parser: &mut Parser) -> Box<dyn Expression> {
+fn parse_prefix_expr(parser: &mut Parser) -> Expression {
     let mut expr = PrefixExpression {
         token: parser.current_token.clone(),
         operator: parser.current_token.literal.clone(),
-        right: Box::new(ZeroValueExpression {}),
+        right: ZeroValueExpression {},
     };
 
     parser.next_token();
@@ -464,14 +463,14 @@ fn parse_prefix_expr(parser: &mut Parser) -> Box<dyn Expression> {
                 parser.current_token.line, parser.current_token.literal
             );
             parser.errors.push(msg);
-            Box::new(ZeroValueExpression {})
+            ZeroValueExpression {}
         }
     };
 
-    Box::new(expr)
+    expr
 }
 
-fn parse_grouped_expr(parser: &mut Parser) -> Box<dyn Expression> {
+fn parse_grouped_expr(parser: &mut Parser) -> Expression {
     parser.next_token();
 
     let expr = match parser.parse_expression(OpPrecedence::Lowest) {
@@ -482,33 +481,33 @@ fn parse_grouped_expr(parser: &mut Parser) -> Box<dyn Expression> {
                 parser.current_token.line, parser.current_token.literal
             );
             parser.errors.push(msg);
-            Box::new(ZeroValueExpression {})
+            ZeroValueExpression {}
         }
     };
 
     if !parser.expect_peek_type(TokenType::RightParen) {
-        return Box::new(ZeroValueExpression {});
+        return ZeroValueExpression {};
     }
 
     expr
 }
 
-fn parse_if_expr(parser: &mut Parser) -> Box<dyn Expression> {
+fn parse_if_expr(parser: &mut Parser) -> Expression {
     let mut expr = IfExpression {
         token: parser.current_token.clone(),
-        condition: Box::new(ZeroValueExpression {}),
+        condition: ZeroValueExpression {},
         consequence: BlockStatement {
             token: parser.current_token.clone(),
             statements: vec![],
         },
-        alternative: BlockStatement {
+        alternative: Some(BlockStatement {
             token: parser.current_token.clone(),
             statements: vec![],
-        },
+        }),
     };
 
     if !parser.expect_peek_type(TokenType::LeftParen) {
-        return Box::new(ZeroValueExpression {});
+        return ZeroValueExpression {};
     }
 
     parser.next_token();
@@ -521,15 +520,15 @@ fn parse_if_expr(parser: &mut Parser) -> Box<dyn Expression> {
                 parser.current_token.line, parser.current_token.literal
             );
             parser.errors.push(msg);
-            Box::new(ZeroValueExpression {})
+            ZeroValueExpression {}
         }
     };
 
     if !parser.expect_peek_type(TokenType::RightParen) {
-        return Box::new(ZeroValueExpression {});
+        return ZeroValueExpression {};
     }
     if !parser.expect_peek_type(TokenType::LeftBrace) {
-        return Box::new(ZeroValueExpression {});
+        return ZeroValueExpression {};
     }
 
     expr.consequence = parser.parse_block_statement();
@@ -538,16 +537,16 @@ fn parse_if_expr(parser: &mut Parser) -> Box<dyn Expression> {
         parser.next_token();
 
         if !parser.expect_peek_type(TokenType::LeftBrace) {
-            return Box::new(ZeroValueExpression {});
+            return ZeroValueExpression {};
         }
 
         expr.alternative = parser.parse_block_statement();
     }
 
-    Box::new(expr)
+    expr
 }
 
-fn parse_let_statement(parser: &mut Parser) -> Box<dyn Statement> {
+fn parse_let_statement(parser: &mut Parser) -> Statement {
     let zero_value_token = Token {
         token_type: TokenType::None,
         literal: String::from(""),
@@ -560,11 +559,11 @@ fn parse_let_statement(parser: &mut Parser) -> Box<dyn Statement> {
     let mut stmt = LetStatement {
         token: parser.current_token.clone(),
         name: zero_value_identifier,
-        value: Box::new(ZeroValueExpression {}),
+        value: ZeroValueExpression {},
     };
 
     if !parser.expect_peek_type(TokenType::Identifier) {
-        return Box::new(ZeroValueStatement {});
+        return ZeroValueStatement {};
     }
 
     stmt.name = Identifier {
@@ -573,7 +572,7 @@ fn parse_let_statement(parser: &mut Parser) -> Box<dyn Statement> {
     };
 
     if !parser.expect_peek_type(TokenType::Equal) {
-        return Box::new(ZeroValueStatement {});
+        return ZeroValueStatement {};
     }
 
     parser.next_token();
@@ -586,7 +585,7 @@ fn parse_let_statement(parser: &mut Parser) -> Box<dyn Statement> {
                 parser.current_token.line, parser.current_token.literal
             );
             parser.errors.push(msg);
-            Box::new(ZeroValueExpression {})
+            ZeroValueExpression {}
         }
     };
 
@@ -598,10 +597,10 @@ fn parse_let_statement(parser: &mut Parser) -> Box<dyn Statement> {
         parser.next_token();
     }
 
-    Box::new(stmt)
+    stmt
 }
 
-fn parse_const_statement(parser: &mut Parser) -> Box<dyn Statement> {
+fn parse_const_statement(parser: &mut Parser) -> Statement {
     let zero_value_token = Token {
         token_type: TokenType::None,
         literal: String::from(""),
@@ -614,11 +613,11 @@ fn parse_const_statement(parser: &mut Parser) -> Box<dyn Statement> {
     let mut stmt = ConstStatement {
         token: parser.current_token.clone(),
         name: zero_value_identifier,
-        value: Box::new(ZeroValueExpression {}),
+        value: ZeroValueExpression {},
     };
 
     if !parser.expect_peek_type(TokenType::Identifier) {
-        return Box::new(ZeroValueStatement {});
+        return ZeroValueStatement {};
     }
 
     stmt.name = Identifier {
@@ -627,7 +626,7 @@ fn parse_const_statement(parser: &mut Parser) -> Box<dyn Statement> {
     };
 
     if !parser.expect_peek_type(TokenType::Equal) {
-        return Box::new(ZeroValueStatement {});
+        return ZeroValueStatement {};
     }
 
     parser.next_token();
@@ -655,7 +654,7 @@ fn parse_const_statement(parser: &mut Parser) -> Box<dyn Statement> {
     Box::new(stmt)
 }
 
-fn parse_return_statement(parser: &mut Parser) -> Box<dyn Statement> {
+fn parse_return_statement(parser: &mut Parser) -> Statement {
     let mut stmt = ReturnStatement {
         token: parser.current_token.clone(),
         return_value: Box::new(ZeroValueExpression {}),
@@ -671,7 +670,7 @@ fn parse_return_statement(parser: &mut Parser) -> Box<dyn Statement> {
                 parser.current_token.line, parser.current_token.literal,
             );
             parser.errors.push(msg);
-            Box::new(ZeroValueExpression {})
+            ZeroValueExpression {}
         }
     };
 
@@ -679,13 +678,13 @@ fn parse_return_statement(parser: &mut Parser) -> Box<dyn Statement> {
         parser.next_token();
     }
 
-    Box::new(stmt)
+    stmt
 }
 
-fn parse_expr_statement(parser: &mut Parser) -> Box<dyn Statement> {
+fn parse_expr_statement(parser: &mut Parser) -> Statement {
     let mut stmt = ExpressionStatement {
         token: parser.current_token.clone(),
-        expression: Box::new(ZeroValueExpression {}),
+        expression: ZeroValueExpression {},
     };
 
     stmt.expression = match parser.parse_expression(OpPrecedence::Lowest) {
@@ -696,7 +695,7 @@ fn parse_expr_statement(parser: &mut Parser) -> Box<dyn Statement> {
                 parser.current_token.line, parser.current_token.literal,
             );
             parser.errors.push(msg);
-            Box::new(ZeroValueExpression {})
+            ZeroValueExpression {}
         }
     };
 
@@ -704,13 +703,13 @@ fn parse_expr_statement(parser: &mut Parser) -> Box<dyn Statement> {
         parser.next_token();
     }
 
-    Box::new(stmt)
+    stmt
 }
 
-fn parse_function_literal(parser: &mut Parser) -> Box<dyn Expression> {
+fn parse_function_literal(parser: &mut Parser) -> Expression {
     let zero_value_token = Token {
         token_type: TokenType::None,
-        literal: String::from(""),
+        literal: "".to_string(),
         line: 0,
     };
     let mut func_literal = FunctionLiteral {
@@ -720,32 +719,32 @@ fn parse_function_literal(parser: &mut Parser) -> Box<dyn Expression> {
             token: zero_value_token,
             statements: vec![],
         },
-        name: RefCell::new(String::from("")),
+        name: "".to_string(),
     };
 
     if !parser.expect_peek_type(TokenType::LeftParen) {
-        return Box::new(ZeroValueExpression {});
+        return ZeroValueExpression {};
     }
 
     func_literal.parameters = parser.parse_function_params();
 
     if !parser.expect_peek_type(TokenType::LeftBrace) {
-        return Box::new(ZeroValueExpression {});
+        return ZeroValueExpression {};
     }
 
     func_literal.body = parser.parse_block_statement();
 
-    Box::new(func_literal)
+    func_literal
 }
 
-fn parse_array_literal(parser: &mut Parser) -> Box<dyn Expression> {
-    Box::new(ArrayLiteral {
+fn parse_array_literal(parser: &mut Parser) -> Expression {
+    ArrayLiteral {
         token: parser.current_token.clone(),
         elements: parser.parse_expression_list(TokenType::RightBracket),
-    })
+    }
 }
 
-fn parse_hash_literal(parser: &mut Parser) -> Box<dyn Expression> {
+fn parse_hash_literal(parser: &mut Parser) -> Expression {
     let mut hash = HashLiteral {
         token: parser.current_token.clone(),
         pairs: HashMap::new(),
@@ -762,12 +761,12 @@ fn parse_hash_literal(parser: &mut Parser) -> Box<dyn Expression> {
                     parser.current_token.line, parser.current_token.literal,
                 );
                 parser.errors.push(msg);
-                Box::new(ZeroValueExpression {})
+                ZeroValueExpression {}
             }
         };
 
         if !parser.expect_peek_type(TokenType::Colon) {
-            return Box::new(ZeroValueExpression {});
+            return ZeroValueExpression {};
         }
 
         parser.next_token();
@@ -780,50 +779,49 @@ fn parse_hash_literal(parser: &mut Parser) -> Box<dyn Expression> {
                     parser.current_token.line, parser.current_token.literal,
                 );
                 parser.errors.push(msg);
-                Box::new(ZeroValueExpression {})
+                ZeroValueExpression {}
             }
         };
 
-        hash.pairs.insert(ExpressionKey::new(key), value);
+        hash.pairs.insert(key, value);
 
         if !parser.peek_token_type_is(TokenType::RightBrace)
             && !parser.expect_peek_type(TokenType::Comma)
         {
-            return Box::new(ZeroValueExpression {});
+            return ZeroValueExpression {};
         }
     }
 
     if !parser.expect_peek_type(TokenType::RightBrace) {
-        return Box::new(ZeroValueExpression {});
+        return ZeroValueExpression {};
     }
 
-    Box::new(hash)
+    hash
 }
 
-fn parse_string_literal(parser: &mut Parser) -> Box<dyn Expression> {
-    Box::new(StringLiteral {
+fn parse_string_literal(parser: &mut Parser) -> Expression {
+    StringLiteral {
         token: parser.current_token.clone(),
         value: parser.current_token.literal.clone(),
-    })
+    }
 }
 
-fn parse_integer_literal(parser: &mut Parser) -> Box<dyn Expression> {
-    Box::new(IntegerLiteral {
+fn parse_integer_literal(parser: &mut Parser) -> Expression {
+    IntegerLiteral {
         token: parser.current_token.clone(),
-
-        // TODO: update to handle instead of unwrapping:
+        // TODO: update to handle instead of unwrapping
         value: parser.current_token.literal.parse::<usize>().unwrap(),
-    })
+    }
 }
 
-fn parse_boolean(parser: &mut Parser) -> Box<dyn Expression> {
-    Box::new(Boolean {
+fn parse_boolean(parser: &mut Parser) -> Expression {
+    Boolean {
         token: parser.current_token.clone(),
         value: parser.current_token_type_is(TokenType::True),
-    })
+    }
 }
 
-fn is_zero_value_statement(stmt: &Box<dyn Statement>) -> bool {
+fn is_zero_value_statement(stmt: &Statement) -> bool {
     stmt.as_any().is::<ZeroValueStatement>()
 }
 
@@ -844,7 +842,7 @@ mod tests {
         panic!("parser errors: {:?}", parser.errors);
     }
 
-    fn test_let_statement(stmt: &Box<dyn Statement>, expected_identifier: &str) {
+    fn test_let_statement(stmt: &Statement, expected_identifier: &str) {
         if stmt.token_literal() != "let" {
             panic!("statement.token_literal not let: {}", stmt.token_literal());
         }
@@ -857,7 +855,7 @@ mod tests {
         }
     }
 
-    fn test_const_statement(stmt: &Box<dyn Statement>, expected_identifier: &str) {
+    fn test_const_statement(stmt: &Statement, expected_identifier: &str) {
         if stmt.token_literal() != "const" {
             panic!(
                 "statement.token_literal not const: {}",
@@ -873,7 +871,7 @@ mod tests {
         }
     }
 
-    fn test_return_statement(stmt: &Box<dyn Statement>) {
+    fn test_return_statement(stmt: &Statement) {
         if stmt.token_literal() != "return" {
             panic!(
                 "statement.token_literal is not return: {}",
@@ -885,7 +883,7 @@ mod tests {
         }
     }
 
-    fn test_literal_expression(expr: &Box<dyn Expression>, expected_value: ExpectedValue) {
+    fn test_literal_expression(expr: &Expression, expected_value: ExpectedValue) {
         match expected_value {
             ExpectedValue::Int(value) => {
                 test_integer_literal(expr, value);
@@ -899,7 +897,7 @@ mod tests {
         }
     }
 
-    fn test_integer_literal(expr: &Box<dyn Expression>, value: i64) {
+    fn test_integer_literal(expr: &Expression, value: i64) {
         if !expr.as_any().is::<IntegerLiteral>() {
             panic!("expression is not an integer literal");
         }
@@ -912,7 +910,7 @@ mod tests {
         }
     }
 
-    fn test_boolean_literal(expr: &Box<dyn Expression>, value: bool) {
+    fn test_boolean_literal(expr: &Expression, value: bool) {
         if !expr.as_any().is::<Boolean>() {
             panic!("expression is not a boolean");
         }
@@ -925,7 +923,7 @@ mod tests {
         }
     }
 
-    fn test_identifier(expr: &Box<dyn Expression>, value: String) {
+    fn test_identifier(expr: &Expression, value: String) {
         if !expr.as_any().is::<Identifier>() {
             panic!("expression is not a identifier");
         }
@@ -939,7 +937,7 @@ mod tests {
     }
 
     fn test_infix_expression(
-        expr: &Box<dyn Expression>,
+        expr: &Expression,
         left: ExpectedValue,
         operator: &str,
         right: ExpectedValue,
@@ -2039,14 +2037,14 @@ mod tests {
         for (key, left_val, operator, right_val) in test_cases {
             let value = hash_literal
                 .pairs
-                .get(&ExpressionKey::new(Box::new(StringLiteral {
+                .get(&StringLiteral {
                     token: Token {
                         token_type: TokenType::String,
                         literal: key.to_string(),
                         line: 0,
                     },
                     value: key.to_string(),
-                })))
+                })
                 .unwrap_or_else(|| panic!("No value found for key {}", key));
 
             test_infix_expression(

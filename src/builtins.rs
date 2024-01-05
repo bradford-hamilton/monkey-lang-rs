@@ -64,7 +64,7 @@ fn b_len<'a>(args: &'a [Object]) -> Object<'a> {
 }
 
 fn b_print<'a>(args: &'a [Object]) -> Object<'a> {
-    for arg in &args {
+    for arg in args {
         match arg {
             Object::Integer(value) => println!("{}", value),
             Object::Boolean(value) => println!("{}", value),
@@ -183,7 +183,7 @@ fn b_pop<'a>(args: &'a [Object]) -> Object<'a> {
     }
 }
 
-fn b_split<'a>(args: &'a [Object]) -> Object<'a> {
+fn b_split<'a>(args: &[Object]) -> Object<'a> {
     if args.len() != 2 {
         return Object::Error("Wrong number of arguments. Got: {}, Expected: 2".to_string());
     }

@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 /// Environment holds a store of key value pairs and a an "outer", enclosing environment.
+#[derive(Debug)]
 pub struct Environment<'a> {
     store: HashMap<String, Object<'a>>,
     outer: Option<Rc<Environment<'a>>>,

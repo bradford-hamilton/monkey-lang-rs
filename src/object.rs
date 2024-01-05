@@ -1,15 +1,13 @@
 use crate::builtins::BuiltinObject;
 use crate::environment::Environment;
 use crate::{
-    ast::{BlockStatement, Identifier, Node},
+    ast::{BlockStatement, Identifier},
     bytecode,
 };
-use std::cell::RefCell;
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
 use std::fmt;
 use std::hash::{Hash, Hasher};
-use std::rc::Rc;
 
 #[derive(Clone)]
 pub enum Object<'a> {
@@ -124,6 +122,29 @@ impl<'a> fmt::Display for Object<'a> {
     }
 }
 
+impl<'a> fmt::Debug for Object<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Object::Integer(value) => write!(f, "Integer({})", value),
+            Object::Boolean(value) => write!(f, "Boolean({})", value),
+            Object::Str(value) => write!(f, "Str({:?})", value),
+            Object::Array(elements) => {
+                write!(f, "Array(")?;
+                f.debug_list().entries(elements).finish()?;
+                write!(f, ")")
+            }
+            Object::Hash(hash_object) => write!(f, "Hash({:?})", hash_object),
+            Object::Function(func_object) => write!(f, "Function({:?})", func_object),
+            Object::Builtin(builtin_object) => write!(f, "Builtin({:?})", builtin_object),
+            Object::Null => write!(f, "Null"),
+            Object::ReturnValue(value) => write!(f, "ReturnValue({:?})", value),
+            Object::Error(message) => write!(f, "Error({:?})", message),
+            Object::CompiledFunc(compiled_func) => write!(f, "CompiledFunc({:?})", compiled_func),
+            Object::Closure(closure) => write!(f, "Closure({:?})", closure),
+        }
+    }
+}
+
 pub struct Null {}
 
 /// CompiledFunction holds the instructions we get from the compilation of a function
@@ -147,24 +168,26 @@ pub struct Error {
     pub message: String,
 }
 
+#[derive(Debug)]
 pub struct FunctionObject<'a> {
     pub params: Vec<Identifier>,
     pub body: BlockStatement,
-    pub env: Rc<RefCell<Environment<'a>>>,
+    pub env: Environment<'a>,
 }
 
-#[derive(Eq, PartialEq, Hash, Clone)]
+#[derive(Eq, PartialEq, Hash, Clone, Debug)]
 pub struct HashKey<'a> {
     pub object_type: &'static str,
     pub value: Object<'a>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct HashPair<'a> {
     pub key: &'a Object<'a>,
     pub value: &'a Object<'a>,
 }
 
+#[derive(Debug)]
 pub struct HashObject<'a> {
     pub pairs: HashMap<HashKey<'a>, HashPair<'a>>,
 }
@@ -191,7 +214,11 @@ impl<'a> HashObject<'a> {
         match object {
             Object::Integer(value) => HashKey {
                 object_type: "INTEGER",
-                value: *value as u64,
+                value: Object::Integer(*value),
+            },
+            Object::Boolean(b) => HashKey {
+                object_type: "BOOLEAN",
+                value: Object::Boolean(*b),
             },
             Object::Str(value) => {
                 let mut hasher = std::collections::hash_map::DefaultHasher::new();
@@ -199,13 +226,9 @@ impl<'a> HashObject<'a> {
                 let hash = hasher.finish();
                 HashKey {
                     object_type: "STRING",
-                    value: hash,
+                    value: Object::Integer(hash as i64),
                 }
             }
-            Object::Boolean(b) => HashKey {
-                object_type: "BOOLEAN",
-                value: b,
-            },
             _ => panic!("unsupported type for hashing"),
         }
     }
@@ -228,12 +251,12 @@ pub struct ReturnValueObj<'a> {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::{
         ast::{LetStatement, StringLiteral},
         bytecode::Instructions,
+        token::TokenType,
     };
-
-    use super::*;
 
     #[test]
     fn test_string_hash_key() {
@@ -311,7 +334,7 @@ mod tests {
         let mut pairs = HashMap::new();
         pairs.insert(
             HashKey {
-                object_type: Object::Str,
+                object_type: "INTEGER",
                 value: Object::Integer(1),
             },
             HashPair {
@@ -538,11 +561,10 @@ mod tests {
 
     #[test]
     fn test_return_values() {
-        let rv = Object::ReturnValueObject {
-            value: Box::new(Str {
-                value: "im a returned string".to_string(),
-            }),
-        };
+        let rv = Object::ReturnValue(StringLiteral {
+            token: TokenType::String,
+            value: "im a returned string".to_string(),
+        });
         assert_eq!(
             rv.object_type(),
             Object::ReturnValue,
@@ -559,7 +581,8 @@ mod tests {
 
     #[test]
     fn test_strings() {
-        let s = Str {
+        let s = StringLiteral {
+            token: TokenType::String,
             value: "thurman merman".to_string(),
         };
         assert_eq!(
@@ -579,14 +602,13 @@ mod tests {
     #[test]
     fn test_builtins() {
         use crate::builtins;
-        use std::sync::Arc;
 
         fn null_builtin_func(_args: Vec<Object>) -> Object {
-            Rc::new(Null {})
+            Null {}
         }
 
         let b = BuiltinObject {
-            func: Arc::new(null_builtin_func),
+            func: null_builtin_func,
         };
 
         assert_eq!(
