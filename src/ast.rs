@@ -9,7 +9,7 @@ pub enum Node {
     Expression(Expression),
 }
 
-#[derive(Eq, Hash, PartialEq)]
+#[derive(Eq, Hash, PartialEq, Debug)]
 pub enum Statement {
     Let(LetStatement),
     Const(ConstStatement),
@@ -19,7 +19,7 @@ pub enum Statement {
     ZeroValue(ZeroValueStatement),
 }
 
-#[derive(Eq, Hash, PartialEq)]
+#[derive(Eq, Hash, PartialEq, Debug)]
 pub enum Expression {
     Identifier(Identifier),
     Integer(IntegerLiteral),
@@ -186,33 +186,33 @@ pub struct RootNode {
     pub statements: Vec<Statement>,
 }
 
-#[derive(Eq, Hash, PartialEq)]
+#[derive(Eq, Hash, PartialEq, Debug)]
 pub struct LetStatement {
     pub token: Token,
     pub name: Identifier,
     pub value: Expression,
 }
 
-#[derive(Eq, Hash, PartialEq)]
+#[derive(Eq, Hash, PartialEq, Debug)]
 pub struct ConstStatement {
     pub token: Token,
     pub name: Identifier,
     pub value: Expression,
 }
 
-#[derive(Eq, Hash, PartialEq)]
+#[derive(Eq, Hash, PartialEq, Debug)]
 pub struct ReturnStatement {
     pub token: Token,
     pub return_value: Expression,
 }
 
-#[derive(Eq, Hash, PartialEq)]
+#[derive(Eq, Hash, PartialEq, Debug)]
 pub struct ExpressionStatement {
     pub token: Token,
     pub expression: Expression,
 }
 
-#[derive(Eq, Hash, PartialEq)]
+#[derive(Eq, Hash, PartialEq, Debug)]
 pub struct BlockStatement {
     pub token: Token,
     pub statements: Vec<Statement>,
@@ -244,26 +244,26 @@ impl Identifier {
     }
 }
 
-#[derive(Eq, Hash, PartialEq)]
+#[derive(Eq, Hash, PartialEq, Debug)]
 pub struct IntegerLiteral {
     pub token: Token,
     pub value: i64,
 }
 
-#[derive(Eq, Hash, PartialEq)]
+#[derive(Eq, Hash, PartialEq, Debug)]
 pub struct Boolean {
     pub token: Token,
     pub value: bool,
 }
 
-#[derive(Eq, Hash, PartialEq)]
+#[derive(Eq, Hash, PartialEq, Debug)]
 pub struct PrefixExpression {
     pub token: Token,
     pub operator: String,
     pub right: Rc<Expression>,
 }
 
-#[derive(Eq, Hash, PartialEq)]
+#[derive(Eq, Hash, PartialEq, Debug)]
 pub struct InfixExpression {
     pub token: Token,
     pub left: Rc<Expression>,
@@ -271,7 +271,7 @@ pub struct InfixExpression {
     pub right: Rc<Expression>,
 }
 
-#[derive(Eq, Hash, PartialEq)]
+#[derive(Eq, Hash, PartialEq, Debug)]
 pub struct IfExpression {
     pub token: Token,
     pub condition: Rc<Expression>,
@@ -279,7 +279,7 @@ pub struct IfExpression {
     pub alternative: BlockStatement,
 }
 
-#[derive(Eq, Hash, PartialEq)]
+#[derive(Eq, Hash, PartialEq, Debug)]
 pub struct FunctionLiteral {
     pub token: Token,
     pub parameters: Vec<Identifier>,
@@ -287,26 +287,26 @@ pub struct FunctionLiteral {
     pub name: String,
 }
 
-#[derive(Eq, Hash, PartialEq)]
+#[derive(Eq, Hash, PartialEq, Debug)]
 pub struct CallExpression {
     pub token: Token,
     pub function: Rc<Expression>,
     pub arguments: Vec<Expression>,
 }
 
-#[derive(Eq, Hash, PartialEq)]
+#[derive(Eq, Hash, PartialEq, Debug)]
 pub struct StringLiteral {
     pub token: Token,
     pub value: String,
 }
 
-#[derive(Eq, Hash, PartialEq)]
+#[derive(Eq, Hash, PartialEq, Debug)]
 pub struct ArrayLiteral {
     pub token: Token,
     pub elements: Vec<Expression>,
 }
 
-#[derive(Eq, PartialEq)]
+#[derive(Eq, PartialEq, Debug)]
 pub struct HashLiteral {
     pub token: Token,
     pub pairs: HashMap<Expression, Expression>,
@@ -334,15 +334,15 @@ impl HashLiteral {
     }
 }
 
-#[derive(Eq, Hash, PartialEq)]
+#[derive(Eq, Hash, PartialEq, Debug)]
 pub struct IndexExpression {
     pub token: Token,
     pub left: Rc<Expression>,
     pub index: Rc<Expression>,
 }
 
-#[derive(Eq, Hash, PartialEq)]
+#[derive(Eq, Hash, PartialEq, Debug)]
 pub struct ZeroValueStatement {}
 
-#[derive(Eq, Hash, PartialEq)]
+#[derive(Eq, Hash, PartialEq, Debug)]
 pub struct ZeroValueExpression {}

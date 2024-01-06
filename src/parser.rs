@@ -1856,7 +1856,6 @@ mod tests {
             Statement::Expression(expr_stmt) => expr_stmt,
             _ => panic!("stmt is not an expression statement"),
         };
-
         let array_literal = match &expr_stmt.expression {
             Expression::Array(array_literal) => array_literal,
             _ => panic!("expression statement's expression is not an array literal"),
@@ -1886,49 +1885,52 @@ mod tests {
 
     #[test]
     fn test_parsing_hash_literals_string_keys() {
-        let input = "{\"one\": 1, \"two\": 2, \"three\": 3}".to_string();
-        let lexer = Lexer::new(input);
+        let input = "{\"one\": 1, \"two\": 2, \"three\": 3}";
+        let lexer = Lexer::new(input.to_string());
         let mut parser = Parser::new(lexer);
         let program = parser.parse_program();
 
         check_parser_errors(&parser);
 
+        assert_eq!(
+            program.statements.len(),
+            1,
+            "program doesn't contain 1 statement. Got: {}",
+            program.statements.len()
+        );
+
         let stmt = &program.statements[0];
-        if !stmt.as_any().is::<ExpressionStatement>() {
-            panic!("stmt is not an expression statement");
-        }
-        let expr_stmt = stmt.as_any().downcast_ref::<ExpressionStatement>().unwrap();
+        let expr_stmt = match stmt {
+            Statement::Expression(expr_stmt) => expr_stmt,
+            _ => panic!("stmt is not an expression statement"),
+        };
+        let hash_literal = match &expr_stmt.expression {
+            Expression::Hash(hash_literal) => hash_literal,
+            _ => panic!("expression statement's expression is not a hash literal"),
+        };
 
-        if !expr_stmt.expression.as_any().is::<HashLiteral>() {
-            panic!("expression statement's expression is not a hash literal");
-        }
-        let hash_literal = expr_stmt
-            .expression
-            .as_any()
-            .downcast_ref::<HashLiteral>()
-            .unwrap();
-
-        let expected = vec![("one", 1), ("two", 2), ("three", 3)]
-            .into_iter()
-            .collect::<HashMap<&str, i64>>();
+        let expected_keys = vec!["one", "two", "three"];
+        let expected_values = vec![1, 2, 3];
 
         assert_eq!(
             hash_literal.pairs.len(),
-            expected.len(),
+            expected_keys.len(),
             "hash.Pairs has wrong length"
         );
 
-        for (key, value) in &hash_literal.pairs {
-            let string_literal = match key.0.as_any().downcast_ref::<StringLiteral>() {
-                Some(literal) => literal,
-                None => panic!("Key is not a StringLiteral"),
-            };
-
-            let expected_value = expected
-                .get(string_literal.value.as_str())
-                .expect("Expected value not found");
-
-            test_integer_literal(value, *expected_value); // Assuming a function to test integer literals
+        for (i, (key, value)) in hash_literal.pairs.iter().enumerate() {
+            match key {
+                Expression::String(string_literal) => {
+                    assert_eq!(string_literal.value, expected_keys[i]);
+                }
+                _ => panic!("Key is not a StringLiteral"),
+            }
+            match value {
+                Expression::Integer(int_literal) => {
+                    assert_eq!(int_literal.value, expected_values[i]);
+                }
+                _ => panic!("Value is not an IntegerLiteral"),
+            }
         }
     }
 
@@ -1949,19 +1951,15 @@ mod tests {
         );
 
         let stmt = &program.statements[0];
-        if !stmt.as_any().is::<ExpressionStatement>() {
-            panic!("stmt is not an expression statement");
-        }
-        let expr_stmt = stmt.as_any().downcast_ref::<ExpressionStatement>().unwrap();
+        let expr_stmt = match stmt {
+            Statement::Expression(expr_stmt) => expr_stmt,
+            _ => panic!("stmt is not an expression statement"),
+        };
 
-        if !expr_stmt.expression.as_any().is::<HashLiteral>() {
-            panic!("expression statements expression is not a hash literal");
-        }
-        let hash_literal = expr_stmt
-            .expression
-            .as_any()
-            .downcast_ref::<HashLiteral>()
-            .unwrap();
+        let hash_literal = match &expr_stmt.expression {
+            Expression::Hash(hash_literal) => hash_literal,
+            _ => panic!("expression statement's expression is not a hash literal"),
+        };
 
         assert_eq!(
             hash_literal.pairs.len(),
@@ -1988,19 +1986,15 @@ mod tests {
         );
 
         let stmt = &program.statements[0];
-        if !stmt.as_any().is::<ExpressionStatement>() {
-            panic!("stmt is not an expression statement");
-        }
-        let expr_stmt = stmt.as_any().downcast_ref::<ExpressionStatement>().unwrap();
+        let expr_stmt = match stmt {
+            Statement::Expression(expr_stmt) => expr_stmt,
+            _ => panic!("stmt is not an expression statement"),
+        };
 
-        if !expr_stmt.expression.as_any().is::<HashLiteral>() {
-            panic!("expression statements expression is not a hash literal");
-        }
-        let hash_literal = expr_stmt
-            .expression
-            .as_any()
-            .downcast_ref::<HashLiteral>()
-            .unwrap();
+        let hash_literal = match &expr_stmt.expression {
+            Expression::Hash(hash_literal) => hash_literal,
+            _ => panic!("expression statement's expression is not a hash literal"),
+        };
 
         assert_eq!(
             hash_literal.pairs.len(),
@@ -2010,30 +2004,32 @@ mod tests {
         );
 
         let test_cases = vec![
-            ("one", 0, "+", 1),
-            ("two", 10, "-", 8),
-            ("three", 15, "/", 5),
+            ("one", ExpectedValue::Int(0), "+", ExpectedValue::Int(1)),
+            ("two", ExpectedValue::Int(10), "-", ExpectedValue::Int(8)),
+            ("three", ExpectedValue::Int(15), "/", ExpectedValue::Int(5)),
         ];
 
-        for (key, left_val, operator, right_val) in test_cases {
-            let value = hash_literal
-                .pairs
-                .get(&StringLiteral {
-                    token: Token {
-                        token_type: TokenType::String,
-                        literal: key.to_string(),
-                        line: 0,
-                    },
-                    value: key.to_string(),
-                })
-                .unwrap_or_else(|| panic!("No value found for key {}", key));
+        for (key_str, left_val, operator, right_val) in test_cases {
+            let key = Expression::String(StringLiteral {
+                token: Token {
+                    token_type: TokenType::String,
+                    literal: key_str.to_string(),
+                    line: 0,
+                },
+                value: key_str.to_string(),
+            });
 
-            test_infix_expression(
-                value,
-                ExpectedValue::Int(left_val),
-                operator,
-                ExpectedValue::Int(right_val),
-            );
+            match hash_literal.pairs.get(&key) {
+                Some(Expression::Infix(infix_expr)) => {
+                    test_infix_expression(
+                        &Expression::Infix(*infix_expr),
+                        left_val,
+                        operator,
+                        right_val,
+                    );
+                }
+                _ => panic!("expected an infix expression for key {}", key_str),
+            }
         }
     }
 
@@ -2054,21 +2050,17 @@ mod tests {
         );
 
         let stmt = &program.statements[0];
-        if !stmt.as_any().is::<ExpressionStatement>() {
-            panic!("stmt is not an expression statement");
-        }
-        let expr_stmt = stmt.as_any().downcast_ref::<ExpressionStatement>().unwrap();
+        let expr_stmt = match stmt {
+            Statement::Expression(expr_stmt) => expr_stmt,
+            _ => panic!("stmt is not an expression statement"),
+        };
 
-        if !expr_stmt.expression.as_any().is::<IndexExpression>() {
-            panic!("expression statements expression is not an index expression");
-        }
-        let index_expression = expr_stmt
-            .expression
-            .as_any()
-            .downcast_ref::<IndexExpression>()
-            .unwrap();
+        let index_expression = match &expr_stmt.expression {
+            Expression::Index(index_expr) => index_expr,
+            _ => panic!("expression statement's expression is not an index expression"),
+        };
 
-        test_identifier(&index_expression.left, String::from("myArray"));
+        test_identifier(&index_expression.left, "myArray");
         test_infix_expression(
             &index_expression.index,
             ExpectedValue::Int(1),
@@ -2094,25 +2086,20 @@ mod tests {
         );
 
         let stmt = &program.statements[0];
-        if !stmt.as_any().is::<LetStatement>() {
-            panic!("program.Statements[0] is not a LetStatement");
-        }
-        let let_stmt = stmt.as_any().downcast_ref::<LetStatement>().unwrap();
+        let let_stmt = match stmt {
+            Statement::Let(let_stmt) => let_stmt,
+            _ => panic!("program.Statements[0] is not a LetStatement"),
+        };
 
-        if !let_stmt.value.as_any().is::<FunctionLiteral>() {
-            panic!("expression statements expression is not a function literal");
-        }
-        let function_literal = let_stmt
-            .value
-            .as_any()
-            .downcast_ref::<FunctionLiteral>()
-            .unwrap();
+        let function_literal = match &let_stmt.value {
+            Expression::Function(func_lit) => func_lit,
+            _ => panic!("let statement's value is not a function literal"),
+        };
 
-        if function_literal.name.take() != *"myFunction" {
-            panic!(
-                "function literal name wrong. Expected 'myFunction'. Got: '{}'",
-                function_literal.name.take(),
-            );
-        }
+        assert_eq!(
+            function_literal.name, "myFunction",
+            "function literal name wrong. Expected 'myFunction'. Got: '{}'",
+            function_literal.name
+        );
     }
 }
