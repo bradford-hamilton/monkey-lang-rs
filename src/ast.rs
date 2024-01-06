@@ -9,7 +9,7 @@ pub enum Node {
     Expression(Expression),
 }
 
-#[derive(Eq, Hash, PartialEq, Debug)]
+#[derive(Eq, Hash, PartialEq, Debug, Clone)]
 pub enum Statement {
     Let(LetStatement),
     Const(ConstStatement),
@@ -19,7 +19,7 @@ pub enum Statement {
     ZeroValue(ZeroValueStatement),
 }
 
-#[derive(Eq, Hash, PartialEq, Debug)]
+#[derive(Eq, Hash, PartialEq, Debug, Clone)]
 pub enum Expression {
     Identifier(Identifier),
     Integer(IntegerLiteral),
@@ -75,11 +75,11 @@ impl Node {
 impl Statement {
     pub fn token_literal(&self) -> String {
         match self {
-            Statement::Let(stmt) => stmt.token.literal,
-            Statement::Const(stmt) => stmt.token.literal,
-            Statement::Return(stmt) => stmt.token.literal,
-            Statement::Expression(stmt) => stmt.token.literal,
-            Statement::Block(stmt) => stmt.token.literal,
+            Statement::Let(stmt) => stmt.token.literal.clone(),
+            Statement::Const(stmt) => stmt.token.literal.clone(),
+            Statement::Return(stmt) => stmt.token.literal.clone(),
+            Statement::Expression(stmt) => stmt.token.literal.clone(),
+            Statement::Block(stmt) => stmt.token.literal.clone(),
             Statement::ZeroValue(_) => "zerovaluestatement".to_string(),
         }
     }
@@ -114,28 +114,28 @@ impl Statement {
 impl Expression {
     pub fn token_literal(&self) -> String {
         match self {
-            Expression::Identifier(expr) => expr.token.literal,
-            Expression::Integer(expr) => expr.token.literal,
-            Expression::Boolean(expr) => expr.token.literal,
-            Expression::String(expr) => expr.token.literal,
-            Expression::Prefix(expr) => expr.token.literal,
-            Expression::Infix(expr) => expr.token.literal,
-            Expression::Index(expr) => expr.token.literal,
-            Expression::If(expr) => expr.token.literal,
-            Expression::Function(expr) => expr.token.literal,
-            Expression::Hash(expr) => expr.token.literal,
-            Expression::Array(expr) => expr.token.literal,
-            Expression::Call(expr) => expr.token.literal,
+            Expression::Identifier(expr) => expr.token.literal.clone(),
+            Expression::Integer(expr) => expr.token.literal.clone(),
+            Expression::Boolean(expr) => expr.token.literal.clone(),
+            Expression::String(expr) => expr.token.literal.clone(),
+            Expression::Prefix(expr) => expr.token.literal.clone(),
+            Expression::Infix(expr) => expr.token.literal.clone(),
+            Expression::Index(expr) => expr.token.literal.clone(),
+            Expression::If(expr) => expr.token.literal.clone(),
+            Expression::Function(expr) => expr.token.literal.clone(),
+            Expression::Hash(expr) => expr.token.literal.clone(),
+            Expression::Array(expr) => expr.token.literal.clone(),
+            Expression::Call(expr) => expr.token.literal.clone(),
             Expression::ZeroValue(_) => "zerovalueexpression".to_string(),
         }
     }
 
     pub fn string(&self) -> String {
         match self {
-            Expression::Identifier(expr) => expr.value,
+            Expression::Identifier(expr) => expr.value.clone(),
             Expression::Integer(expr) => expr.value.to_string(),
             Expression::Boolean(expr) => expr.value.to_string(),
-            Expression::String(expr) => expr.token.literal,
+            Expression::String(expr) => expr.token.literal.clone(),
             Expression::Prefix(expr) => format!("({}{})", expr.operator, expr.right.string()),
             Expression::Infix(expr) => format!(
                 "({} {} {})",
@@ -156,7 +156,7 @@ impl Expression {
                 result
             }
             Expression::Function(expr) => {
-                let params: Vec<_> = expr.parameters.iter().map(|p| p.value).collect();
+                let params: Vec<_> = expr.parameters.iter().map(|p| p.value.clone()).collect();
                 format!("fn({}) {}", params.join(", "), expr.body.string())
             }
             Expression::Hash(expr) => {
@@ -186,33 +186,33 @@ pub struct RootNode {
     pub statements: Vec<Statement>,
 }
 
-#[derive(Eq, Hash, PartialEq, Debug)]
+#[derive(Eq, Hash, PartialEq, Debug, Clone)]
 pub struct LetStatement {
     pub token: Token,
     pub name: Identifier,
     pub value: Expression,
 }
 
-#[derive(Eq, Hash, PartialEq, Debug)]
+#[derive(Eq, Hash, PartialEq, Debug, Clone)]
 pub struct ConstStatement {
     pub token: Token,
     pub name: Identifier,
     pub value: Expression,
 }
 
-#[derive(Eq, Hash, PartialEq, Debug)]
+#[derive(Eq, Hash, PartialEq, Debug, Clone)]
 pub struct ReturnStatement {
     pub token: Token,
     pub return_value: Expression,
 }
 
-#[derive(Eq, Hash, PartialEq, Debug)]
+#[derive(Eq, Hash, PartialEq, Debug, Clone)]
 pub struct ExpressionStatement {
     pub token: Token,
     pub expression: Expression,
 }
 
-#[derive(Eq, Hash, PartialEq, Debug)]
+#[derive(Eq, Hash, PartialEq, Debug, Clone)]
 pub struct BlockStatement {
     pub token: Token,
     pub statements: Vec<Statement>,
@@ -220,7 +220,7 @@ pub struct BlockStatement {
 
 impl BlockStatement {
     pub fn token_literal(&self) -> String {
-        self.token.literal
+        self.token.literal.clone()
     }
 
     pub fn string(&self) -> String {
@@ -232,7 +232,7 @@ impl BlockStatement {
     }
 }
 
-#[derive(Eq, Hash, PartialEq, Debug)]
+#[derive(Eq, Hash, PartialEq, Debug, Clone)]
 pub struct Identifier {
     pub token: Token,
     pub value: String,
@@ -244,26 +244,26 @@ impl Identifier {
     }
 }
 
-#[derive(Eq, Hash, PartialEq, Debug)]
+#[derive(Eq, Hash, PartialEq, Debug, Clone)]
 pub struct IntegerLiteral {
     pub token: Token,
     pub value: i64,
 }
 
-#[derive(Eq, Hash, PartialEq, Debug)]
+#[derive(Eq, Hash, PartialEq, Debug, Clone)]
 pub struct Boolean {
     pub token: Token,
     pub value: bool,
 }
 
-#[derive(Eq, Hash, PartialEq, Debug)]
+#[derive(Eq, Hash, PartialEq, Debug, Clone)]
 pub struct PrefixExpression {
     pub token: Token,
     pub operator: String,
     pub right: Rc<Expression>,
 }
 
-#[derive(Eq, Hash, PartialEq, Debug)]
+#[derive(Eq, Hash, PartialEq, Debug, Clone)]
 pub struct InfixExpression {
     pub token: Token,
     pub left: Rc<Expression>,
@@ -271,7 +271,7 @@ pub struct InfixExpression {
     pub right: Rc<Expression>,
 }
 
-#[derive(Eq, Hash, PartialEq, Debug)]
+#[derive(Eq, Hash, PartialEq, Debug, Clone)]
 pub struct IfExpression {
     pub token: Token,
     pub condition: Rc<Expression>,
@@ -279,7 +279,7 @@ pub struct IfExpression {
     pub alternative: BlockStatement,
 }
 
-#[derive(Eq, Hash, PartialEq, Debug)]
+#[derive(Eq, Hash, PartialEq, Debug, Clone)]
 pub struct FunctionLiteral {
     pub token: Token,
     pub parameters: Vec<Identifier>,
@@ -287,26 +287,26 @@ pub struct FunctionLiteral {
     pub name: String,
 }
 
-#[derive(Eq, Hash, PartialEq, Debug)]
+#[derive(Eq, Hash, PartialEq, Debug, Clone)]
 pub struct CallExpression {
     pub token: Token,
     pub function: Rc<Expression>,
     pub arguments: Vec<Expression>,
 }
 
-#[derive(Eq, Hash, PartialEq, Debug)]
+#[derive(Eq, Hash, PartialEq, Debug, Clone)]
 pub struct StringLiteral {
     pub token: Token,
     pub value: String,
 }
 
-#[derive(Eq, Hash, PartialEq, Debug)]
+#[derive(Eq, Hash, PartialEq, Debug, Clone)]
 pub struct ArrayLiteral {
     pub token: Token,
     pub elements: Vec<Expression>,
 }
 
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Eq, PartialEq, Debug, Clone)]
 pub struct HashLiteral {
     pub token: Token,
     pub pairs: HashMap<Expression, Expression>,
@@ -334,15 +334,15 @@ impl HashLiteral {
     }
 }
 
-#[derive(Eq, Hash, PartialEq, Debug)]
+#[derive(Eq, Hash, PartialEq, Debug, Clone)]
 pub struct IndexExpression {
     pub token: Token,
     pub left: Rc<Expression>,
     pub index: Rc<Expression>,
 }
 
-#[derive(Eq, Hash, PartialEq, Debug)]
+#[derive(Eq, Hash, PartialEq, Debug, Clone)]
 pub struct ZeroValueStatement {}
 
-#[derive(Eq, Hash, PartialEq, Debug)]
+#[derive(Eq, Hash, PartialEq, Debug, Clone)]
 pub struct ZeroValueExpression {}

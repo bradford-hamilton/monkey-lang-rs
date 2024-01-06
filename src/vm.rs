@@ -3,7 +3,7 @@ use crate::builtins::{BuiltinObject, BUILTINS};
 use crate::bytecode::{read_uint16, read_uint8, Instructions, Opcode};
 use crate::compiler::Bytecode;
 use crate::frame::Frame;
-use crate::object::{ClosureObject, CompiledFuncObject, Object};
+use crate::object::{ClosureObject, CompiledFuncObject, HashObject, Object};
 use crate::object::{HashKey, HashPair};
 use std::collections::HashMap;
 
@@ -26,7 +26,7 @@ pub struct VirtualMachine<'a> {
 }
 
 impl<'a> VirtualMachine<'a> {
-    pub fn new(bytecode: Bytecode) -> Self {
+    pub fn new(bytecode: Bytecode<'a>) -> Self {
         let main_func = CompiledFuncObject {
             instructions: bytecode.instructions,
             num_locals: 0,
@@ -51,7 +51,7 @@ impl<'a> VirtualMachine<'a> {
         }
     }
 
-    pub fn new_with_global_state(bytecode: Bytecode, state: Vec<Object>) -> Self {
+    pub fn new_with_global_state(bytecode: Bytecode<'a>, state: Vec<Object<'a>>) -> Self {
         let mut vm = VirtualMachine::new(bytecode);
         vm.globals = state;
         vm
@@ -226,8 +226,9 @@ impl<'a> VirtualMachine<'a> {
 
                     let definition = BUILTINS[builtin_index].clone();
                     let builtin = definition.1;
+                    let builtin_object = Object::Builtin(&builtin);
 
-                    self.push(builtin);
+                    self.push(builtin_object);
                 }
 
                 Opcode::OpClosure => {
@@ -242,12 +243,13 @@ impl<'a> VirtualMachine<'a> {
                     let free_index = read_uint8(&ins.0[ip + 1..]) as usize;
                     self.current_frame_mut().ip += 1;
 
-                    let current_closure = self.current_frame().closure.clone();
+                    let current_closure = self.current_frame().closure;
                     self.push(current_closure.free[free_index].clone());
                 }
 
                 Opcode::OpCurrentClosure => {
-                    self.push(self.current_frame().closure.clone());
+                    let closure_object = Object::Closure(&self.current_frame().closure);
+                    self.push(closure_object);
                 }
 
                 _ => unimplemented!("invalid opcode: {:?}", op),
@@ -255,15 +257,15 @@ impl<'a> VirtualMachine<'a> {
         }
     }
 
-    fn current_frame(&self) -> &Frame {
+    fn current_frame(&self) -> &'a Frame {
         &self.frames[self.frames_index - 1]
     }
 
-    fn current_frame_mut(&mut self) -> &mut Frame {
+    fn current_frame_mut(&mut self) -> &'a mut Frame {
         &mut self.frames[self.frames_index - 1]
     }
 
-    fn push_frame(&mut self, frame: Frame) {
+    fn push_frame(&mut self, frame: Frame<'a>) {
         if self.frames_index >= self.frames.capacity() {
             panic!("exceeded maximum frames capacity");
         }
@@ -271,7 +273,7 @@ impl<'a> VirtualMachine<'a> {
         self.frames_index += 1;
     }
 
-    fn pop_frame(&mut self) -> &Frame {
+    fn pop_frame(&mut self) -> &'a Frame {
         if self.frames_index < 1 {
             panic!("cannot pop frame, frame index is 0");
         }
@@ -279,11 +281,11 @@ impl<'a> VirtualMachine<'a> {
         &self.frames[self.frames_index]
     }
 
-    pub fn last_popped_stack_element(&self) -> Object {
+    pub fn last_popped_stack_element(&self) -> Object<'a> {
         self.stack[self.sp as usize].clone()
     }
 
-    fn push(&mut self, obj: Object) {
+    fn push(&mut self, obj: Object<'a>) {
         if self.sp >= STACK_SIZE as u64 {
             panic!("stack overflow");
         }
@@ -305,9 +307,9 @@ impl<'a> VirtualMachine<'a> {
     fn execute_call(&mut self, num_args: usize) {
         let callee = &self.stack[self.sp as usize - 1 - num_args];
 
-        match callee {
-            Object::Closure(closure) => self.call_closure(closure, num_args),
-            Object::Builtin(builtin) => self.call_builtin(builtin, num_args),
+        match &callee {
+            Object::Closure(_) => self.call_closure(*callee, num_args),
+            Object::Builtin(_) => self.call_builtin(*callee, num_args),
             _ => panic!("calling non-function and non-builtin"),
         }
     }
@@ -424,7 +426,11 @@ impl<'a> VirtualMachine<'a> {
 
         match (left, right) {
             (Object::Integer(left_value), Object::Integer(right_value)) => {
-                self.execute_integer_comparison(op, left_value, right_value);
+                self.execute_integer_comparison(
+                    op,
+                    Object::Integer(left_value),
+                    Object::Integer(right_value),
+                );
             }
             _ => match op {
                 Opcode::OpEqualEqual => {
@@ -460,7 +466,6 @@ impl<'a> VirtualMachine<'a> {
     fn build_array(&self, start_index: usize, end_index: usize) -> Object {
         let elements = self.stack[start_index..end_index]
             .iter()
-            .cloned()
             .collect::<Vec<&Object>>();
 
         Object::Array(elements)
@@ -471,36 +476,40 @@ impl<'a> VirtualMachine<'a> {
 
         for i in (start_index..end_index).step_by(2) {
             let key = &self.stack[i];
-            let value = &self.stack[i + 1].clone();
-
-            let hash_key = match key {
-                Object::Str(string_obj) => string_obj.hash_key(),
-                Object::Boolean(boolean_obj) => boolean_obj.hash_key(),
-                Object::Integer(integer_obj) => integer_obj.hash_key(),
-                _ => panic!("unusable as a hash key: {}", key),
+            let object_type = key.object_type();
+            let hash_key = HashKey {
+                object_type,
+                value: *key,
             };
+            let value = &self.stack[i + 1];
 
             pairs.insert(hash_key, HashPair { key, value });
         }
+        let hash_obj = HashObject { pairs };
 
-        Object::Hash(pairs)
+        Object::Hash(&hash_obj)
     }
 
     fn execute_index_expr(&mut self, left: Object, index: Object) {
         match left {
             Object::Array(array_elements) => {
                 if let Object::Integer(index_value) = index {
-                    self.execute_array_index(array_elements, index_value);
+                    // Create a new Vec<Object> by dereferencing and cloning each element
+                    let cloned_elements = array_elements
+                        .iter()
+                        .map(|&elem| elem.clone())
+                        .collect::<Vec<Object>>();
+                    self.execute_array_index(cloned_elements, index_value);
                 } else {
                     panic!("index operator not supported for non-integer indices");
                 }
             }
-            Object::Hash(hash_map) => self.execute_hash_index(hash_map, index),
+            Object::Hash(hash_map) => self.execute_hash_index(Object::Hash(hash_map), index),
             _ => panic!("index operator not supported for type: {:?}", left),
         }
     }
 
-    fn execute_array_index(&mut self, array_elements: Vec<Object>, index_value: i64) {
+    fn execute_array_index(&mut self, array_elements: Vec<Object<'a>>, index_value: i64) {
         let max = array_elements.len() as i64 - 1;
 
         if index_value < 0 || index_value > max {
@@ -511,13 +520,18 @@ impl<'a> VirtualMachine<'a> {
         }
     }
 
-    fn execute_hash_index(&mut self, hash: Object, index: Object) {
+    fn execute_hash_index(&mut self, hash: Object<'a>, index: Object<'a>) {
         if let Object::Hash(hash_object) = hash {
-            let hash_key = match index {
-                Object::Str(ref string) => string.hash_key(),
-                Object::Boolean(ref boolean) => boolean.hash_key(),
-                Object::Integer(ref integer) => integer.hash_key(),
-                _ => panic!("unusable as a hash key: {:?}", index),
+            let hash_key_value = match index {
+                Object::Str(ref string) => Object::Str(string.clone()).hash_key(),
+                Object::Boolean(ref boolean) => Object::Boolean(*boolean).hash_key(),
+                Object::Integer(ref integer) => Object::Integer(*integer).hash_key(),
+                _ => panic!("unusable as hash key: {:?}", index),
+            };
+
+            let hash_key = HashKey {
+                object_type: index.object_type(),
+                value: index,
             };
 
             match hash_object.pairs.get(&hash_key) {
@@ -529,7 +543,7 @@ impl<'a> VirtualMachine<'a> {
         }
     }
 
-    fn call_closure(&mut self, closure: Object, num_args: usize) {
+    fn call_closure(&mut self, closure: Object<'a>, num_args: usize) {
         if let Object::Closure(ref cl) = closure {
             if num_args != cl.func.num_params {
                 panic!(
@@ -549,7 +563,7 @@ impl<'a> VirtualMachine<'a> {
         if let Object::CompiledFunc(ref function) = self.constants[const_index] {
             let mut free = Vec::with_capacity(num_free);
             for i in 0..num_free {
-                free.push(self.stack[self.sp as usize - num_free + i]);
+                free.push(self.stack[self.sp as usize - num_free + i].clone());
             }
             self.sp -= num_free as u64;
             self.push(Object::Closure(&ClosureObject {
@@ -564,18 +578,14 @@ impl<'a> VirtualMachine<'a> {
         }
     }
 
-    fn call_builtin(&mut self, builtin: Object, num_args: usize) {
+    fn call_builtin(&mut self, builtin: Object<'a>, num_args: usize) {
         if let Object::Builtin(ref builtin_func) = builtin {
             let args_start = self.sp as usize - num_args;
-            let args = self.stack[args_start..self.sp as usize]
-                .iter()
-                .cloned()
-                .collect::<Vec<_>>();
+            let args = &self.stack[args_start..self.sp as usize];
             let result = builtin_func.call(args);
 
             self.sp -= num_args as u64 + 1;
 
-            // Push the result or Null if no result is returned
             match result {
                 Object::Null => self.push(Object::Null),
                 _ => self.push(result),
@@ -616,9 +626,9 @@ mod tests {
     use super::*;
     use crate::{ast::RootNode, compiler::Compiler, lexer::Lexer, parser::Parser};
 
-    struct VmTestCase {
+    struct VmTestCase<'a> {
         input: String,
-        expected: Expected,
+        expected: Expected<'a>,
     }
 
     fn run_vm_tests(tests: Vec<VmTestCase>) {
@@ -644,14 +654,14 @@ mod tests {
         parser.parse_program()
     }
 
-    enum Expected {
+    enum Expected<'a> {
         Integer(i64),
         Boolean(bool),
         Null,
         Str(String),
         IntegerArray(Vec<i64>),
         StringArray(Vec<String>),
-        HashMap(HashMap<HashKey, i64>),
+        HashMap(HashMap<HashKey<'a>, i64>),
         Error(String),
     }
 
@@ -697,7 +707,7 @@ mod tests {
             }
             Expected::Error(expected_message) => {
                 if let Object::Error(err_obj) = actual {
-                    assert_eq!(err_obj.message, expected_message);
+                    assert_eq!(err_obj, expected_message);
                 } else {
                     panic!("Expected an error, got {:?}", actual);
                 }

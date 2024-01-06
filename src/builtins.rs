@@ -3,15 +3,15 @@ use lazy_static::lazy_static;
 
 #[derive(PartialEq, Debug, Hash)]
 pub struct BuiltinObject<'a> {
-    pub func: fn(&'a [Object]) -> Object<'a>,
+    pub func: fn(&'a [Object<'a>]) -> Object<'a>,
 }
 
 impl<'a> BuiltinObject<'a> {
-    pub fn new(func: fn(&'a [Object]) -> Object<'a>) -> Self {
+    pub fn new(func: fn(&'a [Object<'a>]) -> Object<'a>) -> Self {
         BuiltinObject { func }
     }
 
-    pub fn call(&self, args: &[Object<'a>]) -> Object<'a> {
+    pub fn call(&self, args: &'a [Object<'a>]) -> Object<'a> {
         (self.func)(args)
     }
 }
@@ -45,7 +45,7 @@ pub fn get_builtin_by_name(name: &str) -> Option<BuiltinObject> {
         .map(|(_, builtin)| builtin.clone())
 }
 
-fn b_len<'a>(args: &'a [Object]) -> Object<'a> {
+fn b_len<'a>(args: &'a [Object<'a>]) -> Object<'a> {
     if args.len() != 1 {
         return Object::Error(new_error(format!(
             "Wrong number of arguments. Got: {}, Expected: 1",
@@ -63,7 +63,7 @@ fn b_len<'a>(args: &'a [Object]) -> Object<'a> {
     }
 }
 
-fn b_print<'a>(args: &'a [Object]) -> Object<'a> {
+fn b_print<'a>(args: &'a [Object<'a>]) -> Object<'a> {
     for arg in args {
         match arg {
             Object::Integer(value) => println!("{}", value),
@@ -98,7 +98,7 @@ fn b_print<'a>(args: &'a [Object]) -> Object<'a> {
     Object::Null
 }
 
-fn b_first<'a>(args: &'a [Object]) -> Object<'a> {
+fn b_first<'a>(args: &'a [Object<'a>]) -> Object<'a> {
     if args.len() != 1 {
         return Object::Error("Wrong number of arguments. Got: {}, Expected: 1".to_string());
     }
@@ -115,7 +115,7 @@ fn b_first<'a>(args: &'a [Object]) -> Object<'a> {
     }
 }
 
-fn b_last<'a>(args: &'a [Object]) -> Object<'a> {
+fn b_last<'a>(args: &'a [Object<'a>]) -> Object<'a> {
     if args.len() != 1 {
         return Object::Error("Wrong number of arguments. Got: {}, Expected: 1".to_string());
     }
@@ -132,7 +132,7 @@ fn b_last<'a>(args: &'a [Object]) -> Object<'a> {
     }
 }
 
-fn b_rest<'a>(args: &'a [Object]) -> Object<'a> {
+fn b_rest<'a>(args: &'a [Object<'a>]) -> Object<'a> {
     if args.len() != 1 {
         return Object::Error("Wrong number of arguments. Got: {}, Expected: 1".to_string());
     }
@@ -150,7 +150,7 @@ fn b_rest<'a>(args: &'a [Object]) -> Object<'a> {
     }
 }
 
-fn b_push<'a>(args: &'a [Object]) -> Object<'a> {
+fn b_push<'a>(args: &'a [Object<'a>]) -> Object<'a> {
     if args.len() != 2 {
         return Object::Error("Wrong number of arguments. Got: {}, Expected: 2".to_string());
     }
@@ -165,7 +165,7 @@ fn b_push<'a>(args: &'a [Object]) -> Object<'a> {
     }
 }
 
-fn b_pop<'a>(args: &'a [Object]) -> Object<'a> {
+fn b_pop<'a>(args: &'a [Object<'a>]) -> Object<'a> {
     if args.len() != 1 {
         return Object::Error("Wrong number of arguments. Got: {}, Expected: 1".to_string());
     }
@@ -183,7 +183,7 @@ fn b_pop<'a>(args: &'a [Object]) -> Object<'a> {
     }
 }
 
-fn b_split<'a>(args: &'a [Object]) -> Object<'a> {
+fn b_split<'a>(args: &'a [Object<'a>]) -> Object<'a> {
     if args.len() != 2 {
         return Object::Error("Wrong number of arguments. Got: {}, Expected: 2".to_string());
     }
@@ -206,7 +206,7 @@ fn b_split<'a>(args: &'a [Object]) -> Object<'a> {
     }
 }
 
-fn b_join<'a>(args: &'a [Object]) -> Object<'a> {
+fn b_join<'a>(args: &'a [Object<'a>]) -> Object<'a> {
     if args.len() != 2 {
         return Object::Error("Wrong number of arguments. Got: {}, Expected: 2".to_string());
     }

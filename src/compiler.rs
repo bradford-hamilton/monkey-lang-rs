@@ -68,10 +68,10 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    pub fn bytecode(&self) -> Bytecode {
+    pub fn bytecode(&self) -> Bytecode<'a> {
         Bytecode {
             instructions: self.current_instructions(),
-            constants: self.constants,
+            constants: self.constants.clone(),
         }
     }
 
@@ -109,7 +109,7 @@ impl<'a> Compiler<'a> {
         self.scopes[self.scope_index as usize].last_instruction = last;
     }
 
-    pub fn add_constant(&mut self, obj: Object) -> usize {
+    pub fn add_constant(&mut self, obj: Object<'a>) -> usize {
         self.constants.push(obj);
         self.constants.len() - 1
     }
@@ -212,11 +212,11 @@ impl<'a> Compiler<'a> {
         match node {
             Node::Root(root_node) => {
                 for statement in &root_node.statements {
-                    self.compile(&Node::Statement(*statement))?;
+                    self.compile(&Node::Statement(statement.clone()))?;
                 }
             }
             Node::Statement(Statement::Expression(expression_stmt)) => {
-                self.compile(&Node::Expression(expression_stmt.expression))?;
+                self.compile(&Node::Expression(expression_stmt.expression.clone()))?;
                 self.emit(Opcode::OpPop, vec![]);
             }
             Node::Expression(Expression::Infix(infix_expr)) => {
@@ -302,7 +302,9 @@ impl<'a> Compiler<'a> {
                 self.compile(&Node::Expression(*if_expr.condition))?;
 
                 let jump_not_truthy_pos = self.emit(Opcode::OpJumpNotTruthy, vec![9999]);
-                self.compile(&Node::Statement(Statement::Block(if_expr.consequence)))?;
+                self.compile(&Node::Statement(Statement::Block(
+                    if_expr.consequence.clone(),
+                )))?;
 
                 if self.last_instruction_is(Opcode::OpPop) {
                     self.remove_last_pop();
@@ -333,9 +335,9 @@ impl<'a> Compiler<'a> {
                 }
             }
             Node::Statement(Statement::Let(let_stmt)) => {
-                let symbol = self.symbol_table.define(let_stmt.name.value);
+                let symbol = self.symbol_table.define(let_stmt.name.value.clone());
 
-                self.compile(&Node::Expression(let_stmt.value))?;
+                self.compile(&Node::Expression(let_stmt.value.clone()))?;
 
                 match symbol.scope {
                     SymbolScope::Global => {
@@ -349,7 +351,7 @@ impl<'a> Compiler<'a> {
             Node::Statement(Statement::Const(const_stmt)) => {
                 let symbol = self.symbol_table.define(const_stmt.name.value.clone());
 
-                self.compile(&Node::Expression(const_stmt.value))?;
+                self.compile(&Node::Expression(const_stmt.value.clone()))?;
 
                 match symbol.scope {
                     SymbolScope::Global => {
@@ -367,7 +369,7 @@ impl<'a> Compiler<'a> {
                 }
             }
             Node::Expression(Expression::String(string_lit)) => {
-                let string_obj = Object::Str(string_lit.value);
+                let string_obj = Object::Str(string_lit.value.clone());
                 let constant_index = self.add_constant(string_obj);
                 self.emit(Opcode::OpConstant, vec![constant_index as i32]);
             }
@@ -406,14 +408,16 @@ impl<'a> Compiler<'a> {
 
                 // Assuming func_literal.name is a String and not a RefCell<String>
                 if !func_literal.name.is_empty() {
-                    self.symbol_table.define_function(func_literal.name);
+                    self.symbol_table.define_function(func_literal.name.clone());
                 }
 
                 for param in &func_literal.parameters {
-                    self.symbol_table.define(param.value);
+                    self.symbol_table.define(param.value.clone());
                 }
 
-                self.compile(&Node::Statement(Statement::Block(func_literal.body)))?;
+                self.compile(&Node::Statement(Statement::Block(
+                    func_literal.body.clone(),
+                )))?;
 
                 if self.last_instruction_is(Opcode::OpPop) {
                     self.replace_last_pop_with_return();
@@ -422,7 +426,7 @@ impl<'a> Compiler<'a> {
                     self.emit(Opcode::OpReturn, vec![]);
                 }
 
-                let free_symbols = self.symbol_table.free_symbols;
+                let free_symbols = self.symbol_table.free_symbols.clone();
                 let free_symbols_len = free_symbols.len();
                 let num_locals = self.symbol_table.num_definitions;
                 let instructions = self.leave_scope();
@@ -444,7 +448,7 @@ impl<'a> Compiler<'a> {
                 );
             }
             Node::Statement(Statement::Return(return_stmt)) => {
-                self.compile(&Node::Expression(return_stmt.return_value))?;
+                self.compile(&Node::Expression(return_stmt.return_value.clone()))?;
                 self.emit(Opcode::OpReturnValue, vec![]);
             }
             Node::Expression(Expression::Call(call_expr)) => {

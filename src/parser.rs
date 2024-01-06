@@ -380,15 +380,15 @@ fn parse_identifier(parser: &mut Parser) -> Expression {
     }
 
     Expression::Identifier(Identifier {
-        token: parser.current_token,
-        value: parser.current_token.literal,
+        token: parser.current_token.clone(),
+        value: parser.current_token.literal.clone(),
     })
 }
 
 fn parse_infix_expr(parser: &mut Parser, left: Expression) -> Expression {
     let mut expr = InfixExpression {
-        token: parser.current_token,
-        operator: parser.current_token.literal,
+        token: parser.current_token.clone(),
+        operator: parser.current_token.literal.clone(),
         left: Rc::new(left),
         right: Rc::new(Expression::ZeroValue(ZeroValueExpression {})),
     };
@@ -421,7 +421,7 @@ fn parse_call_expr(parser: &mut Parser, func: Expression) -> Expression {
 
 fn parse_index_expr(parser: &mut Parser, left: Expression) -> Expression {
     let mut expr = IndexExpression {
-        token: parser.current_token,
+        token: parser.current_token.clone(),
         left: Rc::new(left),
         index: Expression::ZeroValue(ZeroValueExpression {}).into(),
     };
@@ -449,8 +449,8 @@ fn parse_index_expr(parser: &mut Parser, left: Expression) -> Expression {
 
 fn parse_prefix_expr(parser: &mut Parser) -> Expression {
     let mut expr = PrefixExpression {
-        token: parser.current_token,
-        operator: parser.current_token.literal,
+        token: parser.current_token.clone(),
+        operator: parser.current_token.literal.clone(),
         right: Rc::new(Expression::ZeroValue(ZeroValueExpression {})),
     };
 
@@ -495,14 +495,14 @@ fn parse_grouped_expr(parser: &mut Parser) -> Expression {
 
 fn parse_if_expr(parser: &mut Parser) -> Expression {
     let mut expr = IfExpression {
-        token: parser.current_token,
+        token: parser.current_token.clone(),
         condition: Rc::new(Expression::ZeroValue(ZeroValueExpression {})),
         consequence: BlockStatement {
-            token: parser.current_token,
+            token: parser.current_token.clone(),
             statements: vec![],
         },
         alternative: BlockStatement {
-            token: parser.current_token,
+            token: parser.current_token.clone(),
             statements: vec![],
         },
     };
@@ -558,7 +558,7 @@ fn parse_let_statement(parser: &mut Parser) -> Statement {
         value: "".to_string(),
     };
     let mut stmt = LetStatement {
-        token: parser.current_token,
+        token: parser.current_token.clone(),
         name: zero_value_identifier,
         value: Expression::ZeroValue(ZeroValueExpression {}),
     };
@@ -568,8 +568,8 @@ fn parse_let_statement(parser: &mut Parser) -> Statement {
     }
 
     stmt.name = Identifier {
-        token: parser.current_token,
-        value: parser.current_token.literal,
+        token: parser.current_token.clone(),
+        value: parser.current_token.literal.clone(),
     };
 
     if !parser.expect_peek_type(TokenType::Equal) {
@@ -592,7 +592,7 @@ fn parse_let_statement(parser: &mut Parser) -> Statement {
 
     match stmt.value {
         Expression::Function(ref mut func_literal) => {
-            func_literal.name = stmt.name.value;
+            func_literal.name = stmt.name.value.clone();
         }
         _ => {}
     }
@@ -615,7 +615,7 @@ fn parse_const_statement(parser: &mut Parser) -> Statement {
         value: "".to_string(),
     };
     let mut stmt = ConstStatement {
-        token: parser.current_token,
+        token: parser.current_token.clone(),
         name: zero_value_identifier,
         value: Expression::ZeroValue(ZeroValueExpression {}),
     };
@@ -625,8 +625,8 @@ fn parse_const_statement(parser: &mut Parser) -> Statement {
     }
 
     stmt.name = Identifier {
-        token: parser.current_token,
-        value: parser.current_token.literal,
+        token: parser.current_token.clone(),
+        value: parser.current_token.literal.clone(),
     };
 
     if !parser.expect_peek_type(TokenType::Equal) {
@@ -649,7 +649,7 @@ fn parse_const_statement(parser: &mut Parser) -> Statement {
 
     match stmt.value {
         Expression::Function(ref mut func_literal) => {
-            func_literal.name = stmt.name.value;
+            func_literal.name = stmt.name.value.clone();
         }
         _ => {}
     }
@@ -663,7 +663,7 @@ fn parse_const_statement(parser: &mut Parser) -> Statement {
 
 fn parse_return_statement(parser: &mut Parser) -> Statement {
     let mut stmt = ReturnStatement {
-        token: parser.current_token,
+        token: parser.current_token.clone(),
         return_value: Expression::ZeroValue(ZeroValueExpression {}),
     };
 
@@ -690,7 +690,7 @@ fn parse_return_statement(parser: &mut Parser) -> Statement {
 
 fn parse_expr_statement(parser: &mut Parser) -> Statement {
     let mut stmt = ExpressionStatement {
-        token: parser.current_token,
+        token: parser.current_token.clone(),
         expression: Expression::ZeroValue(ZeroValueExpression {}),
     };
 
@@ -720,7 +720,7 @@ fn parse_function_literal(parser: &mut Parser) -> Expression {
         line: 0,
     };
     let mut func_literal = FunctionLiteral {
-        token: parser.current_token,
+        token: parser.current_token.clone(),
         parameters: vec![],
         body: BlockStatement {
             token: zero_value_token,
@@ -746,14 +746,14 @@ fn parse_function_literal(parser: &mut Parser) -> Expression {
 
 fn parse_array_literal(parser: &mut Parser) -> Expression {
     Expression::Array(ArrayLiteral {
-        token: parser.current_token,
+        token: parser.current_token.clone(),
         elements: parser.parse_expression_list(TokenType::RightBracket),
     })
 }
 
 fn parse_hash_literal(parser: &mut Parser) -> Expression {
     let mut hash = HashLiteral {
-        token: parser.current_token,
+        token: parser.current_token.clone(),
         pairs: HashMap::new(),
     };
 
@@ -808,14 +808,14 @@ fn parse_hash_literal(parser: &mut Parser) -> Expression {
 
 fn parse_string_literal(parser: &mut Parser) -> Expression {
     Expression::String(StringLiteral {
-        token: parser.current_token,
-        value: parser.current_token.literal,
+        token: parser.current_token.clone(),
+        value: parser.current_token.literal.clone(),
     })
 }
 
 fn parse_integer_literal(parser: &mut Parser) -> Expression {
     Expression::Integer(IntegerLiteral {
-        token: parser.current_token,
+        token: parser.current_token.clone(),
         // TODO: update to handle instead of unwrapping
         value: parser.current_token.literal.parse::<i64>().unwrap(),
     })
@@ -823,7 +823,7 @@ fn parse_integer_literal(parser: &mut Parser) -> Expression {
 
 fn parse_boolean(parser: &mut Parser) -> Expression {
     Expression::Boolean(Boolean {
-        token: parser.current_token,
+        token: parser.current_token.clone(),
         value: parser.current_token_type_is(TokenType::True),
     })
 }

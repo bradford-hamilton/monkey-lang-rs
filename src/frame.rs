@@ -17,7 +17,7 @@ pub struct Frame<'a> {
 }
 
 impl<'a> Frame<'a> {
-    pub fn new(closure: ClosureObject, base_pointer: i64) -> Self {
+    pub fn new(closure: ClosureObject<'a>, base_pointer: i64) -> Self {
         Frame {
             closure,
             ip: -1,

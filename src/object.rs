@@ -201,18 +201,11 @@ impl<'a> HashObject<'a> {
         }
     }
 
-    pub fn insert(&mut self, key: Object, value: Object) {
-        let hash_key = self.make_hash_key(&key);
-        self.pairs.insert(
-            hash_key,
-            HashPair {
-                key: &key,
-                value: &value,
-            },
-        );
+    pub fn insert(&mut self, hash_key: HashKey<'a>, key: &'a Object<'a>, value: &'a Object<'a>) {
+        self.pairs.insert(hash_key, HashPair { key, value });
     }
 
-    fn make_hash_key(&self, object: &Object) -> HashKey {
+    fn make_hash_key(&self, object: &Object<'a>) -> HashKey {
         match object {
             Object::Integer(value) => HashKey {
                 object_type: "INTEGER",
@@ -237,7 +230,7 @@ impl<'a> HashObject<'a> {
 }
 
 impl<'a> Object<'a> {
-    fn hash_key(&self) -> u64 {
+    pub fn hash_key(&self) -> u64 {
         let mut hasher = DefaultHasher::new();
 
         match self {

@@ -17,14 +17,14 @@ impl<'a> Environment<'a> {
         }
     }
 
-    pub fn new_enclosed(outer: Environment) -> Self {
+    pub fn new_enclosed(outer: Environment<'a>) -> Self {
         Environment {
             store: HashMap::new(),
             outer: Some(Rc::new(outer)),
         }
     }
 
-    pub fn get(&self, name: &str) -> Option<Object> {
+    pub fn get(&self, name: &str) -> Option<Object<'a>> {
         self.store.get(name).cloned().or_else(|| {
             self.outer
                 .as_ref()
@@ -32,7 +32,7 @@ impl<'a> Environment<'a> {
         })
     }
 
-    pub fn set(&mut self, name: String, val: Object) {
+    pub fn set(&mut self, name: String, val: Object<'a>) {
         self.store.insert(name, val);
     }
 }
