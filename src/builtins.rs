@@ -1,7 +1,7 @@
 use crate::object::Object;
 use lazy_static::lazy_static;
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Debug, Hash)]
 pub struct BuiltinObject<'a> {
     pub func: fn(&'a [Object]) -> Object<'a>,
 }
@@ -83,7 +83,7 @@ fn b_print<'a>(args: &'a [Object]) -> Object<'a> {
                 let pairs_str = hash
                     .pairs
                     .iter()
-                    .map(|(k, v)| format!("{}: {}", k.inspect(), v.inspect()))
+                    .map(|(k, v)| format!("{}: {}", k.value, v.value))
                     .collect::<Vec<_>>()
                     .join(", ");
                 println!("{{{}}}", pairs_str);
@@ -183,23 +183,21 @@ fn b_pop<'a>(args: &'a [Object]) -> Object<'a> {
     }
 }
 
-fn b_split<'a>(args: &[Object]) -> Object<'a> {
+fn b_split<'a>(args: &'a [Object]) -> Object<'a> {
     if args.len() != 2 {
         return Object::Error("Wrong number of arguments. Got: {}, Expected: 2".to_string());
     }
 
     if let Object::Str(string) = &args[0] {
-        if string.is_empty() {
-            return Object::Array(vec![]);
-        }
-
         if let Object::Str(split_on) = &args[1] {
-            let split_result = string
+            let split_owned: Vec<Object> = string
                 .split(split_on)
                 .map(|s| Object::Str(s.to_string()))
                 .collect();
 
-            Object::Array(split_result)
+            let split_refs: Vec<&Object> = split_owned.iter().collect();
+
+            Object::Array(split_refs)
         } else {
             Object::Error("Second argument to `split` must be a String".to_string())
         }

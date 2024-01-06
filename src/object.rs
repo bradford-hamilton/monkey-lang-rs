@@ -153,12 +153,14 @@ pub struct Null {}
 /// to the VM to allocate the correct amount of stack space ("hole") to save the local
 /// bindings
 // TODO: check back in on this comment after implementing.
+#[derive(Debug)]
 pub struct CompiledFuncObject {
     pub instructions: bytecode::Instructions,
     pub num_locals: usize,
     pub num_params: usize,
 }
 
+#[derive(Debug)]
 pub struct ClosureObject<'a> {
     pub func: CompiledFuncObject,
     pub free: Vec<Object<'a>>,
