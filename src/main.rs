@@ -1,4 +1,4 @@
-use ast::RootNode;
+use ast::{Node, RootNode};
 use compiler::Compiler;
 use lexer::Lexer;
 use parser::Parser;
@@ -34,7 +34,8 @@ fn main() {
 
 fn compile_bytecode_and_run(root_node: RootNode) {
     let mut compiler = Compiler::new();
-    let result = compiler.compile(&root_node);
+    let root_node_as_node = Node::Root(root_node);
+    let result = compiler.compile(&root_node_as_node);
 
     match result {
         Ok(_) => {

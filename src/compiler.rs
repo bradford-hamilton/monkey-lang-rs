@@ -1,14 +1,9 @@
-use crate::ast::{
-    ArrayLiteral, BlockStatement, Boolean, CallExpression, ConstStatement, ExpressionStatement,
-    FunctionLiteral, HashLiteral, Identifier, IfExpression, IndexExpression, InfixExpression,
-    IntegerLiteral, LetStatement, Node, PrefixExpression, ReturnStatement, RootNode, StringLiteral,
-};
+use crate::ast::{Expression, Node, Statement};
 use crate::builtins::BUILTINS;
 use crate::bytecode::make_instruction;
 use crate::bytecode::{Instructions, Opcode};
 use crate::object::{CompiledFuncObject, Object};
 use crate::symbol_table::{Symbol, SymbolScope, SymbolTable};
-use std::rc::Rc;
 
 /// Bytecode contains the Instructions our compiler
 /// generated and the constants the compiler evaluated.
@@ -35,7 +30,7 @@ impl EmittedInstruction {
 /// this scope, the emit method of the compiler will modify only the fields
 /// of the current CompilationScope. Once we're done compiling the function,
 /// we leave the scope by popping it off the scopes stack and putting the
-/// instructions in a new object::CompiledFunction
+/// instructions in a new object::CompiledFunc
 struct CompilationScope {
     instructions: Instructions,
     last_instruction: EmittedInstruction,
@@ -76,7 +71,7 @@ impl<'a> Compiler<'a> {
     pub fn bytecode(&self) -> Bytecode {
         Bytecode {
             instructions: self.current_instructions(),
-            constants: self.constants.iter().collect(),
+            constants: self.constants,
         }
     }
 
@@ -198,7 +193,6 @@ impl<'a> Compiler<'a> {
     }
 
     fn replace_last_pop_with_return(&mut self) {
-        // Clone the necessary data to avoid mutable borrow conflict
         let last_pos = if let Some(scope) = self.scopes.get(self.scope_index as usize) {
             scope.last_instruction.position
         } else {
@@ -215,248 +209,256 @@ impl<'a> Compiler<'a> {
 
     // TODO: PostfixExpression after implementing them.
     pub fn compile(&mut self, node: &Node) -> Result<(), String> {
-        if let Some(root_node) = node.as_any().downcast_ref::<RootNode>() {
-            for statement in &root_node.statements {
-                self.compile(statement.as_node())?;
+        match node {
+            Node::Root(root_node) => {
+                for statement in &root_node.statements {
+                    self.compile(&Node::Statement(*statement))?;
+                }
             }
-        } else if let Some(expression_stmt) = node.as_any().downcast_ref::<ExpressionStatement>() {
-            self.compile(expression_stmt.expression.as_node())?;
-            self.emit(Opcode::OpPop, vec![]);
-        } else if let Some(infix_expr) = node.as_any().downcast_ref::<InfixExpression>() {
-            if infix_expr.operator == "<" || infix_expr.operator == "<=" {
-                self.compile(infix_expr.right.as_node())?;
-                self.compile(infix_expr.left.as_node())?;
-                match infix_expr.operator.as_str() {
-                    "<" => {
-                        self.emit(Opcode::OpGreater, vec![]);
+            Node::Statement(Statement::Expression(expression_stmt)) => {
+                self.compile(&Node::Expression(expression_stmt.expression))?;
+                self.emit(Opcode::OpPop, vec![]);
+            }
+            Node::Expression(Expression::Infix(infix_expr)) => {
+                if infix_expr.operator == "<" || infix_expr.operator == "<=" {
+                    self.compile(&Node::Expression(*infix_expr.right))?;
+                    self.compile(&Node::Expression(*infix_expr.left))?;
+                    match infix_expr.operator.as_str() {
+                        "<" => {
+                            self.emit(Opcode::OpGreater, vec![]);
+                        }
+                        _ => {
+                            self.emit(Opcode::OpGreaterEqual, vec![]);
+                        }
                     }
-                    _ => {
-                        self.emit(Opcode::OpGreaterEqual, vec![]);
+                } else {
+                    self.compile(&Node::Expression(*infix_expr.left))?;
+                    self.compile(&Node::Expression(*infix_expr.right))?;
+
+                    match infix_expr.operator.as_str() {
+                        "+" => {
+                            self.emit(Opcode::OpAdd, vec![]);
+                        }
+                        "-" => {
+                            self.emit(Opcode::OpSub, vec![]);
+                        }
+                        "*" => {
+                            self.emit(Opcode::OpMul, vec![]);
+                        }
+                        "/" => {
+                            self.emit(Opcode::OpDiv, vec![]);
+                        }
+                        "%" => {
+                            self.emit(Opcode::OpMod, vec![]);
+                        }
+                        ">" => {
+                            self.emit(Opcode::OpGreater, vec![]);
+                        }
+                        ">=" => {
+                            self.emit(Opcode::OpGreaterEqual, vec![]);
+                        }
+                        "==" => {
+                            self.emit(Opcode::OpEqualEqual, vec![]);
+                        }
+                        "!=" => {
+                            self.emit(Opcode::OpNotEqual, vec![]);
+                        }
+                        "&&" => {
+                            self.emit(Opcode::OpAnd, vec![]);
+                        }
+                        "||" => {
+                            self.emit(Opcode::OpOr, vec![]);
+                        }
+                        _ => return Err(format!("unknown operator {}", infix_expr.operator)),
                     }
                 }
-            } else {
-                self.compile(infix_expr.left.as_node())?;
-                self.compile(infix_expr.right.as_node())?;
+            }
+            Node::Expression(Expression::Integer(int_literal)) => {
+                let integer = Object::Integer(int_literal.value);
+                let constant_index = self.add_constant(integer);
+                self.emit(Opcode::OpConstant, vec![constant_index as i32]);
+            }
+            Node::Expression(Expression::Boolean(boolean)) => {
+                if boolean.value {
+                    self.emit(Opcode::OpTrue, vec![]);
+                } else {
+                    self.emit(Opcode::OpFalse, vec![]);
+                }
+            }
+            Node::Expression(Expression::Prefix(prefix_expr)) => {
+                self.compile(&Node::Expression(*prefix_expr.right))?;
 
-                match infix_expr.operator.as_str() {
-                    "+" => {
-                        self.emit(Opcode::OpAdd, vec![]);
+                match prefix_expr.operator.as_str() {
+                    "!" => {
+                        self.emit(Opcode::OpBang, vec![]);
                     }
                     "-" => {
-                        self.emit(Opcode::OpSub, vec![]);
+                        self.emit(Opcode::OpMinus, vec![]);
                     }
-                    "*" => {
-                        self.emit(Opcode::OpMul, vec![]);
-                    }
-                    "/" => {
-                        self.emit(Opcode::OpDiv, vec![]);
-                    }
-                    "%" => {
-                        self.emit(Opcode::OpMod, vec![]);
-                    }
-                    ">" => {
-                        self.emit(Opcode::OpGreater, vec![]);
-                    }
-                    ">=" => {
-                        self.emit(Opcode::OpGreaterEqual, vec![]);
-                    }
-                    "==" => {
-                        self.emit(Opcode::OpEqualEqual, vec![]);
-                    }
-                    "!=" => {
-                        self.emit(Opcode::OpNotEqual, vec![]);
-                    }
-                    "&&" => {
-                        self.emit(Opcode::OpAnd, vec![]);
-                    }
-                    "||" => {
-                        self.emit(Opcode::OpOr, vec![]);
-                    }
-                    _ => return Err(format!("unknown operator {}", infix_expr.operator)),
+                    _ => return Err(format!("unknown operator {}", prefix_expr.operator)),
                 }
             }
-        } else if let Some(int_literal) = node.as_any().downcast_ref::<IntegerLiteral>() {
-            let integer = Integer {
-                value: int_literal.value as i64,
-            };
-            let constant_index = self.add_constant(Rc::new(integer));
-            self.emit(Opcode::OpConstant, vec![constant_index as i32]);
-        } else if let Some(boolean) = node.as_any().downcast_ref::<Boolean>() {
-            if boolean.value {
-                self.emit(Opcode::OpTrue, vec![]);
-            } else {
-                self.emit(Opcode::OpFalse, vec![]);
-            }
-        } else if let Some(prefix_expr) = node.as_any().downcast_ref::<PrefixExpression>() {
-            self.compile(prefix_expr.right.as_node())?;
+            Node::Expression(Expression::If(if_expr)) => {
+                self.compile(&Node::Expression(*if_expr.condition))?;
 
-            match prefix_expr.operator.as_str() {
-                "!" => {
-                    self.emit(Opcode::OpBang, vec![]);
-                }
-                "-" => {
-                    self.emit(Opcode::OpMinus, vec![]);
-                }
-                _ => return Err(format!("unknown operator {}", prefix_expr.operator)),
-            }
-        } else if let Some(if_expr) = node.as_any().downcast_ref::<IfExpression>() {
-            self.compile(if_expr.condition.as_node())?;
-
-            // Emit an `OpJumpNotTruthy` with a bogus value. After compiling the consequence, we will know
-            // how far to jump and can come back and change it - "back-patching". Because we are creating
-            // a single pass compiler this is the solution, however more complex compilers may not come
-            // back to change this on first pass and instead fill it in on another pass
-            let jump_not_truthy_pos = self.emit(Opcode::OpJumpNotTruthy, vec![9999]);
-            self.compile(if_expr.consequence.as_node())?;
-
-            if self.last_instruction_is(Opcode::OpPop) {
-                self.remove_last_pop();
-            }
-
-            // Emit an `OpJump` with bogus value - see similar explanation above `jumpNotTruthyPos`
-            // variable declaration.
-            let jump_position = self.emit(Opcode::OpJump, vec![9999]);
-            let after_consequence_pos = self.current_instructions().len();
-
-            // Change the jump-to position in the OpJumpNotTruthy emission earlier
-            self.change_operand(jump_not_truthy_pos, after_consequence_pos);
-
-            if !if_expr.alternative.statements.is_empty() {
-                for stmt in &if_expr.alternative.statements {
-                    self.compile(stmt.as_node())?;
-                }
+                let jump_not_truthy_pos = self.emit(Opcode::OpJumpNotTruthy, vec![9999]);
+                self.compile(&Node::Statement(Statement::Block(if_expr.consequence)))?;
 
                 if self.last_instruction_is(Opcode::OpPop) {
                     self.remove_last_pop();
                 }
-            } else {
-                self.emit(Opcode::OpNull, vec![]);
-            }
 
-            let after_alt_pos = self.current_instructions().len();
-            self.change_operand(jump_position, after_alt_pos);
-        } else if let Some(block_stmt) = node.as_any().downcast_ref::<BlockStatement>() {
-            for statement in &block_stmt.statements {
-                self.compile(statement.as_node())?;
-            }
-        } else if let Some(let_stmt) = node.as_any().downcast_ref::<LetStatement>() {
-            let symbol = self.symbol_table.define(let_stmt.name.value.clone());
+                let jump_position = self.emit(Opcode::OpJump, vec![9999]);
+                let after_consequence_pos = self.current_instructions().len();
+                self.change_operand(jump_not_truthy_pos, after_consequence_pos);
 
-            self.compile(let_stmt.value.as_node())?;
+                if if_expr.alternative.statements.len() > 0 {
+                    for stmt in &if_expr.alternative.statements {
+                        self.compile(&Node::Statement(*stmt))?;
+                    }
 
-            match symbol.scope {
-                SymbolScope::Global => {
-                    self.emit(Opcode::OpSetGlobal, vec![symbol.index as i32]);
+                    if self.last_instruction_is(Opcode::OpPop) {
+                        self.remove_last_pop();
+                    }
+                } else {
+                    self.emit(Opcode::OpNull, vec![]);
                 }
-                _ => {
-                    self.emit(Opcode::OpSetLocal, vec![symbol.index as i32]);
-                }
+
+                let after_alt_pos = self.current_instructions().len();
+                self.change_operand(jump_position, after_alt_pos);
             }
-        } else if let Some(const_stmt) = node.as_any().downcast_ref::<ConstStatement>() {
-            let symbol = self.symbol_table.define(const_stmt.name.value.clone());
-
-            self.compile(const_stmt.value.as_node())?;
-
-            match symbol.scope {
-                SymbolScope::Global => {
-                    self.emit(Opcode::OpSetGlobal, vec![symbol.index as i32]);
-                }
-                _ => {
-                    self.emit(Opcode::OpSetLocal, vec![symbol.index as i32]);
+            Node::Statement(Statement::Block(block_stmt)) => {
+                for statement in &block_stmt.statements {
+                    self.compile(&Node::Statement(*statement))?;
                 }
             }
-        } else if let Some(identifier) = node.as_any().downcast_ref::<Identifier>() {
-            match self.symbol_table.resolve(&identifier.value) {
-                Some(symbol) => self.load_symbol(symbol),
-                None => return Err(format!("undefined variable {}", identifier.value)),
+            Node::Statement(Statement::Let(let_stmt)) => {
+                let symbol = self.symbol_table.define(let_stmt.name.value);
+
+                self.compile(&Node::Expression(let_stmt.value))?;
+
+                match symbol.scope {
+                    SymbolScope::Global => {
+                        self.emit(Opcode::OpSetGlobal, vec![symbol.index as i32]);
+                    }
+                    _ => {
+                        self.emit(Opcode::OpSetLocal, vec![symbol.index as i32]);
+                    }
+                }
             }
-        } else if let Some(string_lit) = node.as_any().downcast_ref::<StringLiteral>() {
-            let string_obj = crate::object::Str {
-                value: string_lit.value.clone(),
-            };
-            let constant_index = self.add_constant(Rc::new(string_obj));
-            self.emit(Opcode::OpConstant, vec![constant_index as i32]);
-        } else if let Some(array_literal) = node.as_any().downcast_ref::<ArrayLiteral>() {
-            for el in &array_literal.elements {
-                self.compile(el.as_node())?;
+            Node::Statement(Statement::Const(const_stmt)) => {
+                let symbol = self.symbol_table.define(const_stmt.name.value.clone());
+
+                self.compile(&Node::Expression(const_stmt.value))?;
+
+                match symbol.scope {
+                    SymbolScope::Global => {
+                        self.emit(Opcode::OpSetGlobal, vec![symbol.index as i32]);
+                    }
+                    _ => {
+                        self.emit(Opcode::OpSetLocal, vec![symbol.index as i32]);
+                    }
+                }
             }
-            self.emit(Opcode::OpArray, vec![array_literal.elements.len() as i32]);
-        } else if let Some(hash_literal) = node.as_any().downcast_ref::<HashLiteral>() {
-            let mut keys: Vec<&ExpressionKey> = hash_literal.pairs.keys().collect();
-
-            // Sort keys based on their string representation
-            keys.sort_by(|a, b| a.0.string().cmp(&b.0.string()));
-
-            for key in keys {
-                // Compile the key
-                self.compile(key.0.as_node())?;
-
-                // Compile the value associated with the key
-                let value = hash_literal
-                    .pairs
-                    .get(key)
-                    .ok_or("key not found in hash literal".to_string())?;
-                self.compile(value.as_node())?;
+            Node::Expression(Expression::Identifier(identifier)) => {
+                match self.symbol_table.resolve(&identifier.value) {
+                    Some(symbol) => self.load_symbol(symbol),
+                    None => return Err(format!("undefined variable {}", identifier.value)),
+                }
             }
-            self.emit(Opcode::OpHash, vec![hash_literal.pairs.len() as i32 * 2]);
-        } else if let Some(index_expr) = node.as_any().downcast_ref::<IndexExpression>() {
-            self.compile(index_expr.left.as_node())?;
-            self.compile(index_expr.index.as_node())?;
-            self.emit(Opcode::OpIndex, vec![]);
-        } else if let Some(func_literal) = node.as_any().downcast_ref::<FunctionLiteral>() {
-            self.enter_scope();
-
-            let func_name = func_literal.name.borrow();
-            if !func_name.to_string().is_empty() {
-                self.symbol_table.define_function(func_name.to_string());
+            Node::Expression(Expression::String(string_lit)) => {
+                let string_obj = Object::Str(string_lit.value);
+                let constant_index = self.add_constant(string_obj);
+                self.emit(Opcode::OpConstant, vec![constant_index as i32]);
             }
-
-            for param in &func_literal.parameters {
-                self.symbol_table.define(param.value.clone());
+            Node::Expression(Expression::Array(array_literal)) => {
+                for el in &array_literal.elements {
+                    self.compile(&Node::Expression(*el))?;
+                }
+                self.emit(Opcode::OpArray, vec![array_literal.elements.len() as i32]);
             }
+            Node::Expression(Expression::Hash(hash_literal)) => {
+                let mut keys: Vec<_> = hash_literal.pairs.keys().collect();
 
-            self.compile(func_literal.body.as_node())?;
+                // Sort keys based on their string representation
+                keys.sort_by(|a, b| a.string().cmp(&b.string()));
 
-            if self.last_instruction_is(Opcode::OpPop) {
-                self.replace_last_pop_with_return();
+                for key in keys {
+                    // Compile the key
+                    self.compile(&Node::Expression(*key))?;
+
+                    // Compile the value associated with the key
+                    let value = hash_literal
+                        .pairs
+                        .get(key)
+                        .ok_or("key not found in hash literal".to_string())?;
+                    self.compile(&Node::Expression(*value))?;
+                }
+                self.emit(Opcode::OpHash, vec![hash_literal.pairs.len() as i32 * 2]);
             }
-            if !self.last_instruction_is(Opcode::OpReturnValue) {
-                self.emit(Opcode::OpReturn, vec![]);
+            Node::Expression(Expression::Index(index_expr)) => {
+                self.compile(&Node::Expression(*index_expr.left))?;
+                self.compile(&Node::Expression(*index_expr.index))?;
+                self.emit(Opcode::OpIndex, vec![]);
             }
+            Node::Expression(Expression::Function(func_literal)) => {
+                self.enter_scope();
 
-            let free_symbols = self.symbol_table.free_symbols.clone();
-            let free_symbols_len = free_symbols.len();
-            let num_locals = self.symbol_table.num_definitions;
-            let instructions = self.leave_scope();
+                // Assuming func_literal.name is a String and not a RefCell<String>
+                if !func_literal.name.is_empty() {
+                    self.symbol_table.define_function(func_literal.name);
+                }
 
-            for symbol in free_symbols {
-                self.load_symbol(symbol);
+                for param in &func_literal.parameters {
+                    self.symbol_table.define(param.value);
+                }
+
+                self.compile(&Node::Statement(Statement::Block(func_literal.body)))?;
+
+                if self.last_instruction_is(Opcode::OpPop) {
+                    self.replace_last_pop_with_return();
+                }
+                if !self.last_instruction_is(Opcode::OpReturnValue) {
+                    self.emit(Opcode::OpReturn, vec![]);
+                }
+
+                let free_symbols = self.symbol_table.free_symbols;
+                let free_symbols_len = free_symbols.len();
+                let num_locals = self.symbol_table.num_definitions;
+                let instructions = self.leave_scope();
+
+                for symbol in free_symbols {
+                    self.load_symbol(symbol);
+                }
+
+                let compiled_func = Object::CompiledFunc(&CompiledFuncObject {
+                    instructions,
+                    num_locals,
+                    num_params: func_literal.parameters.len(),
+                });
+
+                let func_index = self.add_constant(compiled_func);
+                self.emit(
+                    Opcode::OpClosure,
+                    vec![func_index as i32, free_symbols_len as i32],
+                );
             }
-
-            let compiled_func = Object::CompiledFunc(&CompiledFuncObject {
-                instructions,
-                num_locals,
-                num_params: func_literal.parameters.len(),
-            });
-
-            let func_index = self.add_constant(compiled_func);
-            self.emit(
-                Opcode::OpClosure,
-                vec![func_index as i32, free_symbols_len as i32],
-            );
-        } else if let Some(return_stmt) = node.as_any().downcast_ref::<ReturnStatement>() {
-            self.compile(return_stmt.return_value.as_node())?;
-            self.emit(Opcode::OpReturnValue, vec![]);
-        } else if let Some(call_expr) = node.as_any().downcast_ref::<CallExpression>() {
-            self.compile(call_expr.func.as_node())?;
-
-            for arg in &call_expr.arguments {
-                self.compile(arg.as_node())?;
+            Node::Statement(Statement::Return(return_stmt)) => {
+                self.compile(&Node::Expression(return_stmt.return_value))?;
+                self.emit(Opcode::OpReturnValue, vec![]);
             }
+            Node::Expression(Expression::Call(call_expr)) => {
+                self.compile(&Node::Expression(*call_expr.function))?;
 
-            self.emit(Opcode::OpCall, vec![call_expr.arguments.len() as i32]);
-        } else {
-            return Err(String::from("unknown node type"));
+                for arg in &call_expr.arguments {
+                    self.compile(&Node::Expression(*arg))?;
+                }
+
+                self.emit(Opcode::OpCall, vec![call_expr.arguments.len() as i32]);
+            }
+            _ => {
+                return Err("Unrecognized node type".to_string());
+            }
         }
 
         Ok(())
@@ -483,7 +485,7 @@ mod tests {
             let program = parser.parse_program();
             let mut compiler = Compiler::new();
 
-            match compiler.compile(&program) {
+            match compiler.compile(&Node::Root(program)) {
                 Ok(_) => {
                     let bytecode = compiler.bytecode();
                     assert_eq!(
@@ -500,9 +502,7 @@ mod tests {
 
                             // Handle comparisons for objects that will not have full equality
                             // through the inspect() call, but are still "equal".
-                            if test_obj_type == Object::CompiledFunc.to_string()
-                                || test_obj_type == Object::Closure.to_string()
-                            {
+                            if test_obj_type == "COMPILED_FUNCTION" || test_obj_type == "CLOSURE" {
                                 if let Some(start) = test_contents.find('[') {
                                     if let Some(end) = test_contents[start..].find(']') {
                                         test_contents.replace_range(start..start + end + 1, "[]");
@@ -1198,7 +1198,7 @@ mod tests {
                 expected_constants: vec![
                     Object::Integer(5),
                     Object::Integer(10),
-                    Object::ComiledFunction(Object::CompiledFuncObject {
+                    Object::CompiledFunc(&CompiledFuncObject {
                         instructions: Instructions::new(
                             vec![
                                 make_instruction(Opcode::OpConstant, vec![0]),
@@ -1227,7 +1227,7 @@ mod tests {
                 expected_constants: vec![
                     Object::Integer(5),
                     Object::Integer(10),
-                    Object::ComiledFunction(Object::CompiledFuncObject {
+                    Object::CompiledFunc(&CompiledFuncObject {
                         instructions: Instructions::new(
                             vec![
                                 make_instruction(Opcode::OpConstant, vec![0]),
@@ -1256,7 +1256,7 @@ mod tests {
                 expected_constants: vec![
                     Object::Integer(1),
                     Object::Integer(2),
-                    Object::CompiledFunction(Object::CompiledFuncObject {
+                    Object::CompiledFunc(&CompiledFuncObject {
                         instructions: Instructions::new(
                             vec![
                                 make_instruction(Opcode::OpConstant, vec![0]),
@@ -1292,7 +1292,7 @@ mod tests {
                 input: "func() { 24 }();".to_string(),
                 expected_constants: vec![
                     Object::Integer(24),
-                    Object::CompiledFunction(Object::CompiledFuncObject {
+                    Object::CompiledFunc(&CompiledFuncObject {
                         instructions: Instructions::new(
                             vec![
                                 make_instruction(Opcode::OpConstant, vec![0]),
@@ -1319,7 +1319,7 @@ mod tests {
                 input: "let noArg = func() { 24 }; noArg();".to_string(),
                 expected_constants: vec![
                     Object::Integer(24),
-                    Object::ComiledFunction(Object::CompiledFuncObject {
+                    Object::CompiledFunc(&CompiledFuncObject {
                         instructions: Instructions::new(
                             vec![
                                 make_instruction(Opcode::OpConstant, vec![0]),
@@ -1347,7 +1347,7 @@ mod tests {
             CompilerTestCase {
                 input: "let oneArg = func(a) { a }; oneArg(24);".to_string(),
                 expected_constants: vec![
-                    Object::ComiledFunction(Object::CompiledFuncObject {
+                    Object::CompiledFunc(&CompiledFuncObject {
                         instructions: Instructions::new(
                             vec![
                                 make_instruction(Opcode::OpGetLocal, vec![0]),
@@ -1377,7 +1377,7 @@ mod tests {
             CompilerTestCase {
                 input: "let manyArg = func(a, b, c) { a; b; c }; manyArg(24, 25, 26);".to_string(),
                 expected_constants: vec![
-                    Object::ComiledFunction(Object::CompiledFuncObject {
+                    Object::CompiledFunc(&CompiledFuncObject {
                         instructions: Instructions::new(
                             vec![
                                 make_instruction(Opcode::OpGetLocal, vec![0]),
@@ -1445,9 +1445,9 @@ mod tests {
             "last_instruction Opcode should be OpSub"
         );
         let com_sym_tab = compiler.symbol_table.get_outer().unwrap();
-        let global_sym_tab = global_symbol_table.clone();
         assert_eq!(
-            com_sym_tab, global_sym_tab,
+            com_sym_tab,
+            Box::new(global_symbol_table),
             "symbol table should be enclosed in the new scope"
         );
 
@@ -1487,7 +1487,7 @@ mod tests {
     fn test_functions_without_return_value() {
         let tests = vec![CompilerTestCase {
             input: "func() { }".to_string(),
-            expected_constants: vec![Object::ComiledFunction(Object::CompiledFuncObject {
+            expected_constants: vec![Object::CompiledFunc(&CompiledFuncObject {
                 instructions: Instructions::new(
                     vec![make_instruction(Opcode::OpReturn, vec![])]
                         .into_iter()
@@ -1520,7 +1520,7 @@ mod tests {
                 .to_string(),
                 expected_constants: vec![
                     Object::Integer(55),
-                    Object::ComiledFunction(Object::CompiledFuncObject {
+                    Object::CompiledFunc(&CompiledFuncObject {
                         instructions: Instructions::new(
                             vec![
                                 make_instruction(Opcode::OpGetGlobal, vec![0]),
@@ -1554,7 +1554,7 @@ mod tests {
                 .to_string(),
                 expected_constants: vec![
                     Object::Integer(55),
-                    Object::ComiledFunction(Object::CompiledFuncObject {
+                    Object::CompiledFunc(&CompiledFuncObject {
                         instructions: Instructions::new(
                             vec![
                                 make_instruction(Opcode::OpConstant, vec![0]),
@@ -1590,7 +1590,7 @@ mod tests {
                 expected_constants: vec![
                     Object::Integer(55),
                     Object::Integer(77),
-                    Object::ComiledFunction(Object::CompiledFuncObject {
+                    Object::CompiledFunc(&CompiledFuncObject {
                         instructions: Instructions::new(
                             vec![
                                 make_instruction(Opcode::OpConstant, vec![0]),
@@ -1634,7 +1634,7 @@ mod tests {
                 .to_string(),
                 expected_constants: vec![
                     Object::Integer(55),
-                    Object::ComiledFunction(Object::CompiledFuncObject {
+                    Object::CompiledFunc(&CompiledFuncObject {
                         instructions: Instructions::new(
                             vec![
                                 make_instruction(Opcode::OpGetGlobal, vec![0]),
@@ -1668,7 +1668,7 @@ mod tests {
                 .to_string(),
                 expected_constants: vec![
                     Object::Integer(55),
-                    Object::ComiledFunction(Object::CompiledFuncObject {
+                    Object::CompiledFunc(&CompiledFuncObject {
                         instructions: Instructions::new(
                             vec![
                                 make_instruction(Opcode::OpConstant, vec![0]),
@@ -1704,7 +1704,7 @@ mod tests {
                 expected_constants: vec![
                     Object::Integer(55),
                     Object::Integer(77),
-                    Object::ComiledFunction(Object::CompiledFuncObject {
+                    Object::CompiledFunc(&CompiledFuncObject {
                         instructions: Instructions::new(
                             vec![
                                 make_instruction(Opcode::OpConstant, vec![0]),
@@ -1769,7 +1769,7 @@ mod tests {
             },
             CompilerTestCase {
                 input: "func() { len([]) }".to_string(),
-                expected_constants: vec![Object::ComiledFunction(Object::CompiledFuncObject {
+                expected_constants: vec![Object::CompiledFunc(&CompiledFuncObject {
                     instructions: Instructions::new(
                         vec![
                             make_instruction(Opcode::OpGetBuiltin, vec![0]),
@@ -1810,7 +1810,7 @@ mod tests {
                 "
                 .to_string(),
                 expected_constants: vec![
-                    Object::ComiledFunction(Object::CompiledFuncObject {
+                    Object::CompiledFunc(&CompiledFuncObject {
                         instructions: Instructions::new(
                             vec![
                                 make_instruction(Opcode::OpGetFree, vec![0]),
@@ -1825,7 +1825,7 @@ mod tests {
                         num_locals: 1,
                         num_params: 1,
                     }),
-                    Object::ComiledFunction(Object::CompiledFuncObject {
+                    Object::CompiledFunc(&CompiledFuncObject {
                         instructions: Instructions::new(
                             vec![
                                 make_instruction(Opcode::OpGetLocal, vec![0]),
@@ -1860,7 +1860,7 @@ mod tests {
                 "
                 .to_string(),
                 expected_constants: vec![
-                    Object::ComiledFunction(Object::CompiledFuncObject {
+                    Object::CompiledFunc(&CompiledFuncObject {
                         instructions: Instructions::new(
                             vec![
                                 make_instruction(Opcode::OpGetFree, vec![0]),
@@ -1877,7 +1877,7 @@ mod tests {
                         num_locals: 1,
                         num_params: 1,
                     }),
-                    Object::ComiledFunction(Object::CompiledFuncObject {
+                    Object::CompiledFunc(&CompiledFuncObject {
                         instructions: Instructions::new(
                             vec![
                                 make_instruction(Opcode::OpGetFree, vec![0]),
@@ -1892,7 +1892,7 @@ mod tests {
                         num_locals: 1,
                         num_params: 1,
                     }),
-                    Object::ComiledFunction(Object::CompiledFuncObject {
+                    Object::CompiledFunc(&CompiledFuncObject {
                         instructions: Instructions::new(
                             vec![
                                 make_instruction(Opcode::OpGetLocal, vec![0]),
@@ -1939,7 +1939,7 @@ mod tests {
                     Object::Integer(66),
                     Object::Integer(77),
                     Object::Integer(88),
-                    Object::ComiledFunction(Object::CompiledFuncObject {
+                    Object::CompiledFunc(&CompiledFuncObject {
                         instructions: Instructions::new(
                             vec![
                                 make_instruction(Opcode::OpConstant, vec![3]),
@@ -1960,7 +1960,7 @@ mod tests {
                         num_locals: 1,
                         num_params: 1,
                     }),
-                    Object::ComiledFunction(Object::CompiledFuncObject {
+                    Object::CompiledFunc(&CompiledFuncObject {
                         instructions: Instructions::new(
                             vec![
                                 make_instruction(Opcode::OpConstant, vec![2]),
@@ -1977,7 +1977,7 @@ mod tests {
                         num_locals: 1,
                         num_params: 1,
                     }),
-                    Object::ComiledFunction(Object::CompiledFuncObject {
+                    Object::CompiledFunc(&CompiledFuncObject {
                         instructions: Instructions::new(
                             vec![
                                 make_instruction(Opcode::OpConstant, vec![1]),
@@ -2020,7 +2020,7 @@ mod tests {
                 .to_string(),
                 expected_constants: vec![
                     Object::Integer(1),
-                    Object::ComiledFunction(Object::CompiledFuncObject {
+                    Object::CompiledFunc(&CompiledFuncObject {
                         instructions: Instructions::new(
                             vec![
                                 make_instruction(Opcode::OpCurrentClosure, vec![]),
@@ -2062,7 +2062,7 @@ mod tests {
                 .to_string(),
                 expected_constants: vec![
                     Object::Integer(1),
-                    Object::ComiledFunction(Object::CompiledFuncObject {
+                    Object::CompiledFunc(&CompiledFuncObject {
                         instructions: Instructions::new(
                             vec![
                                 make_instruction(Opcode::OpCurrentClosure, vec![]),
@@ -2080,7 +2080,7 @@ mod tests {
                         num_params: 1,
                     }),
                     Object::Integer(1),
-                    Object::ComiledFunction(Object::CompiledFuncObject {
+                    Object::CompiledFunc(&CompiledFuncObject {
                         instructions: Instructions::new(
                             vec![
                                 make_instruction(Opcode::OpClosure, vec![1, 0]),
