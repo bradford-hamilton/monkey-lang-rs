@@ -92,9 +92,9 @@ impl<'a> Object<'a> {
         }
     }
 
-    // TODO
+    // TODO: finish
     pub fn inspect(&self) -> String {
-        "TODO".to_string()
+        format!("{}", self)
     }
 }
 
@@ -236,6 +236,27 @@ impl<'a> HashObject<'a> {
     }
 }
 
+impl<'a> Object<'a> {
+    fn hash_key(&self) -> u64 {
+        let mut hasher = DefaultHasher::new();
+
+        match self {
+            Object::Str(s) => {
+                s.hash(&mut hasher);
+            }
+            Object::Integer(i) => {
+                i.hash(&mut hasher);
+            }
+            Object::Boolean(b) => {
+                b.hash(&mut hasher);
+            }
+            _ => unimplemented!("hash_key method not implemented for this Object variant"),
+        }
+
+        hasher.finish()
+    }
+}
+
 impl<'a> std::fmt::Display for HashObject<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let pairs: Vec<String> = self
@@ -255,9 +276,9 @@ pub struct ReturnValueObj<'a> {
 mod tests {
     use super::*;
     use crate::{
-        ast::{LetStatement, StringLiteral},
+        ast::{Expression, HashLiteral, LetStatement, Statement, StringLiteral},
         bytecode::Instructions,
-        token::TokenType,
+        token::{Token, TokenType},
     };
 
     #[test]
@@ -336,21 +357,24 @@ mod tests {
         let mut pairs = HashMap::new();
         pairs.insert(
             HashKey {
-                object_type: "INTEGER",
-                value: Object::Integer(1),
+                object_type: "STRING",
+                value: (Object::Integer(1)),
             },
             HashPair {
                 key: &Object::Str("monkey".to_string()),
                 value: &Object::Str("lang".to_string()),
             },
         );
-        let h = Object::Hash(pairs);
+        let hash_obj = HashObject { pairs };
+        let h = Object::Hash(&hash_obj);
+
         assert_eq!(
             h.object_type(),
-            Object::Hash,
-            "Hash object_type() returned wrong type. Expected: HashObj. Got: {:?}",
+            "Hash",
+            "Hash object_type() returned wrong type. Expected: Hash. Got: {:?}",
             h.object_type()
         );
+
         assert_eq!(
             h.inspect(),
             "{monkey: lang}",
@@ -367,12 +391,14 @@ mod tests {
             &Object::Integer(3),
         ];
         let arr = Object::Array(elements);
+
         assert_eq!(
             arr.object_type(),
-            Object::Array,
-            "Array object_type() returned wrong type. Expected: ArrayObj. Got: {:?}",
+            "Array",
+            "Array object_type() returned wrong type. Expected: Array. Got: {:?}",
             arr.object_type()
         );
+
         assert_eq!(
             arr.inspect(),
             "[1, 2, 3]",
@@ -386,8 +412,8 @@ mod tests {
         let b = Object::Boolean(false);
         assert_eq!(
             b.object_type(),
-            Object::Boolean,
-            "Boolean object_type() returned wrong type. Expected: BooleanObj. Got: {:?}",
+            "Boolean",
+            "Boolean object_type() returned wrong type. Expected: Boolean. Got: {:?}",
             b.object_type()
         );
         assert_eq!(
@@ -400,21 +426,25 @@ mod tests {
 
     #[test]
     fn test_closure() {
-        let cl = Object::ClosureObject {
-            func: Object::CompiledFuncObject {
-                instructions: Instructions::new(vec![]),
-                num_locals: 0,
-                num_params: 0,
-            },
-            free: Vec::new(),
+        let compiled_func = CompiledFuncObject {
+            instructions: Instructions::new(vec![]),
+            num_locals: 0,
+            num_params: 0,
         };
+        let closure = ClosureObject {
+            func: compiled_func,
+            free: vec![],
+        };
+        let cl = Object::Closure(&closure);
+
         assert_eq!(
             cl.object_type(),
-            Object::Closure,
-            "Closure object_type() returned wrong type. Expected: ClosureObj. Got: {:?}",
+            "Closure",
+            "Closure object_type() returned wrong type. Expected: Closure. Got: {:?}",
             cl.object_type()
         );
-        let expected_inspect = format!("Closure[{:p}]", &cl);
+
+        let expected_inspect = format!("Closure[{:p}]", &compiled_func);
         assert_eq!(
             cl.inspect(),
             expected_inspect,
@@ -431,36 +461,39 @@ mod tests {
             num_locals: 1,
             num_params: 1,
         };
+        let compiled_func = Object::CompiledFunc(&cf); // Assuming Object::CompiledFunc takes a reference to CompiledFuncObject
+
         assert_eq!(
-            cf.object_type(),
-            Object::CompiledFunction,
-            "CompiledFunction object_type() returned wrong type. Expected: CompiledFunctionObj. Got: {:?}",
-            cf.object_type()
+            compiled_func.object_type(),
+            "CompiledFunction",
+            "CompiledFunction object_type() returned wrong type. Expected: CompiledFunction. Got: {:?}",
+            compiled_func.object_type()
         );
+
         let expected_inspect = format!("CompiledFunction[{:p}]", &cf);
         assert_eq!(
-            cf.inspect(),
+            compiled_func.inspect(),
             expected_inspect,
             "CompiledFunction inspect() returned wrong string representation. Expected: {}. Got: {}",
             expected_inspect,
-            cf.inspect()
+            compiled_func.inspect()
         );
     }
 
     #[test]
     fn test_errors() {
-        let e = Error {
-            message: String::from("Uh oh spaghettio"),
-        };
+        let error_message = "Uh oh spaghettio";
+        let e = Object::Error(error_message.to_string()); // Assuming Object::Error takes a String
+
         assert_eq!(
             e.object_type(),
-            Object::Error,
-            "Error object_type() returned wrong type. Expected: ErrorObj. Got: {:?}",
+            "Error",
+            "Error object_type() returned wrong type. Expected: Error. Got: {:?}",
             e.object_type()
         );
         assert_eq!(
             e.inspect(),
-            "Error: Uh oh spaghettio",
+            format!("Error: {}", error_message),
             "Error inspect() returned wrong string representation. Expected: Error: Uh oh spaghettio. Got: {}",
             e.inspect()
         );
@@ -472,53 +505,57 @@ mod tests {
         use crate::environment::Environment;
         use crate::token::{Token, TokenType};
 
-        let f = FunctionObject {
-            params: vec![Identifier {
-                token: Token {
-                    token_type: TokenType::String,
-                    literal: String::from(""),
-                    line: 0,
-                },
-                value: String::from("arg1"),
-            }],
-            body: BlockStatement {
+        let params = vec![Identifier {
+            token: Token {
+                token_type: TokenType::String,
+                literal: String::from(""),
+                line: 0,
+            },
+            value: String::from("arg1"),
+        }];
+
+        let body = BlockStatement {
+            token: Token {
+                token_type: TokenType::String,
+                literal: String::from("let"),
+                line: 0,
+            },
+            statements: vec![Statement::Let(LetStatement {
                 token: Token {
                     token_type: TokenType::String,
                     literal: String::from("let"),
                     line: 0,
                 },
-                statements: vec![Box::new(LetStatement {
+                name: Identifier {
+                    value: String::from("waaat"),
                     token: Token {
                         token_type: TokenType::String,
-                        literal: String::from("let"),
+                        literal: String::from(""),
                         line: 0,
                     },
-                    name: Identifier {
-                        value: String::from("waaat"),
-                        token: Token {
-                            token_type: TokenType::String,
-                            literal: String::from(""),
-                            line: 0,
-                        },
+                },
+                value: Expression::String(StringLiteral {
+                    token: Token {
+                        token_type: TokenType::String,
+                        literal: String::from("thing"),
+                        line: 0,
                     },
-                    value: Box::new(StringLiteral {
-                        token: Token {
-                            token_type: TokenType::String,
-                            literal: String::from("thing"),
-                            line: 0,
-                        },
-                        value: String::from(""),
-                    }),
-                })],
-            },
-            env: Environment::new(),
+                    value: String::from(""),
+                }),
+            })],
         };
+
+        let env = Environment::new();
+        let func_obj = FunctionObject { params, body, env };
+        let f = Object::Function(&func_obj);
+
         assert_eq!(
             f.object_type(),
-            Object::Function,
-            "Function object_type() returned wrong type. Expected: FunctionObj. Got: {:?}",
+            "Function",
+            "Function object_type() returned wrong type. Expected: Function. Got: {:?}",
             f.object_type()
         );
+
         assert_eq!(
             f.inspect(),
             "func(arg1) {\nlet waaat = thing;\n}",
@@ -530,12 +567,14 @@ mod tests {
     #[test]
     fn test_integers() {
         let integer = Object::Integer(666);
+
         assert_eq!(
             integer.object_type(),
-            Object::Integer,
-            "Integer object_type() returned wrong type. Expected: IntegerObj. Got: {:?}",
+            "Integer",
+            "Integer object_type() returned wrong type. Expected: Integer. Got: {:?}",
             integer.object_type()
         );
+
         assert_eq!(
             integer.inspect(),
             "666",
@@ -546,11 +585,11 @@ mod tests {
 
     #[test]
     fn test_null() {
-        let n = Null {};
+        let n = Object::Null;
         assert_eq!(
             n.object_type(),
-            Object::Null,
-            "Null object_type() returned wrong type. Expected: NullObj. Got: {:?}",
+            "Null",
+            "Null object_type() returned wrong type. Expected: Null. Got: {:?}",
             n.object_type()
         );
         assert_eq!(
@@ -563,14 +602,20 @@ mod tests {
 
     #[test]
     fn test_return_values() {
-        let rv = Object::ReturnValue(StringLiteral {
-            token: TokenType::String,
+        let string_literal = StringLiteral {
+            token: Token {
+                token_type: TokenType::String,
+                literal: "im a returned string".to_string(),
+                line: 0,
+            },
             value: "im a returned string".to_string(),
-        });
+        };
+        let rv = Object::ReturnValue(&Object::Str(string_literal.value));
+
         assert_eq!(
             rv.object_type(),
-            Object::ReturnValue,
-            "ReturnValue object_type() returned wrong type. Expected: ReturnValueObj. Got: {:?}",
+            "ReturnValue",
+            "ReturnValue object_type() returned wrong type. Expected: ReturnValue. Got: {:?}",
             rv.object_type()
         );
         assert_eq!(
@@ -583,14 +628,12 @@ mod tests {
 
     #[test]
     fn test_strings() {
-        let s = StringLiteral {
-            token: TokenType::String,
-            value: "thurman merman".to_string(),
-        };
+        let s = Object::Str("thurman merman".to_string());
+
         assert_eq!(
             s.object_type(),
-            Object::String,
-            "String object_type() returned wrong type. Expected: StringObj. Got: {:?}",
+            "String",
+            "String object_type() returned wrong type. Expected: String. Got: {:?}",
             s.object_type()
         );
         assert_eq!(
@@ -605,36 +648,41 @@ mod tests {
     fn test_builtins() {
         use crate::builtins;
 
-        fn null_builtin_func(_args: Vec<Object>) -> Object {
-            Null {}
+        fn null_builtin_func<'a>(args: &[Object]) -> Object<'a> {
+            Object::Null
         }
 
-        let b = BuiltinObject {
+        let builtin_func = BuiltinObject {
             func: null_builtin_func,
         };
 
+        let b = Object::Builtin(&builtin_func);
+
         assert_eq!(
             b.object_type(),
-            Object::Builtin,
-            "Builtin object_type() returned wrong type. Expected: BuiltinObj. Got: {:?}",
+            "Builtin",
+            "Builtin object_type() returned wrong type. Expected: Builtin. Got: {:?}",
             b.object_type()
         );
+
         assert_eq!(
             b.inspect(),
             "builtin function",
             "Builtin inspect() returned wrong string representation. Expected: builtin function. Got: {}",
             b.inspect()
         );
+
         let not_a_builtin = builtins::get_builtin_by_name("notABuiltin");
         assert!(
             not_a_builtin.is_none(),
             "GetBuiltinByName(\"notABuiltin\") should have returned None"
         );
+
         let err = builtins::new_error(String::from("Message with format verbs"));
         assert_eq!(
-            err.message, "Message with format verbs",
+            err, "Message with format verbs",
             "new_error returned wrong error string. Expected: 'Message with format verbs'. Got: {}",
-            err.message
+            err
         );
     }
 }
