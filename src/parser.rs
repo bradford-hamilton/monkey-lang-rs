@@ -859,7 +859,7 @@ mod tests {
 
         match stmt {
             Statement::Let(let_statement) => {
-                if let_statement.name.string() != expected_identifier {
+                if let_statement.name.clone().string() != expected_identifier {
                     panic!("incorrect identifier for let statement");
                 }
             }
@@ -877,7 +877,7 @@ mod tests {
 
         match stmt {
             Statement::Const(const_statement) => {
-                if const_statement.name.string() != expected_identifier {
+                if const_statement.name.clone().string() != expected_identifier {
                     panic!("incorrect identifier for const statement");
                 }
             }
@@ -1609,8 +1609,8 @@ mod tests {
             function.parameters.len()
         );
 
-        test_identifier(&Expression::Identifier(function.parameters[0]), "x");
-        test_identifier(&Expression::Identifier(function.parameters[1]), "y");
+        test_identifier(&Expression::Identifier(function.parameters[0].clone()), "x");
+        test_identifier(&Expression::Identifier(function.parameters[1].clone()), "y");
 
         assert_eq!(
             function.body.statements.len(),

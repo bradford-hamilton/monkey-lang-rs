@@ -10,14 +10,15 @@ use crate::object::ClosureObject;
 // variables and the arguments of the function call. The implementation depends on the language being
 // implemented, the requirements in regards to concurrency and performance, the host language, and more.
 // We are choosing the way that is easiest to build, understand, extend, etc.
+#[derive(Copy, Clone)]
 pub struct Frame<'a> {
-    pub closure: ClosureObject<'a>,
+    pub closure: &'a ClosureObject<'a>,
     pub ip: i64,
     pub base_pointer: i64,
 }
 
 impl<'a> Frame<'a> {
-    pub fn new(closure: ClosureObject<'a>, base_pointer: i64) -> Self {
+    pub fn new(closure: &'a ClosureObject<'a>, base_pointer: i64) -> Self {
         Frame {
             closure,
             ip: -1,

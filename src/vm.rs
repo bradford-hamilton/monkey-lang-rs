@@ -1,4 +1,4 @@
-use crate::ast::{ArrayLiteral, HashLiteral};
+use crate::ast::{ArrayLiteral, HashLiteral, Node};
 use crate::builtins::{BuiltinObject, BUILTINS};
 use crate::bytecode::{read_uint16, read_uint8, Instructions, Opcode};
 use crate::compiler::Bytecode;
@@ -27,17 +27,13 @@ pub struct VirtualMachine<'a> {
 
 impl<'a> VirtualMachine<'a> {
     pub fn new(bytecode: Bytecode<'a>) -> Self {
-        let main_func = CompiledFuncObject {
-            instructions: bytecode.instructions,
-            num_locals: 0,
-            num_params: 0,
-        };
+        let main_func = CompiledFuncObject::new(bytecode.instructions, 0, 0);
         let main_closure = ClosureObject {
-            func: main_func,
+            func: &main_func,
             free: vec![],
         };
-        let main_frame = Frame::new(main_closure, 0);
-        let mut frames = Vec::with_capacity(MAX_FRAMES as usize);
+        let main_frame = Frame::new(&main_closure, 0);
+        let mut frames: Vec<Frame<'_>> = Vec::with_capacity(MAX_FRAMES as usize);
 
         frames.push(main_frame);
 
@@ -298,18 +294,18 @@ impl<'a> VirtualMachine<'a> {
         self.sp += 1;
     }
 
-    fn pop(&mut self) -> Object {
+    fn pop(&mut self) -> Object<'a> {
         let obj = self.stack[self.sp as usize - 1].clone();
         self.sp -= 1;
         obj
     }
 
-    fn execute_call(&mut self, num_args: usize) {
+    fn execute_call(&'a mut self, num_args: usize) {
         let callee = &self.stack[self.sp as usize - 1 - num_args];
 
         match &callee {
-            Object::Closure(_) => self.call_closure(*callee, num_args),
-            Object::Builtin(_) => self.call_builtin(*callee, num_args),
+            Object::Closure(_) => self.call_closure(callee.clone(), num_args),
+            Object::Builtin(_) => self.call_builtin(callee.clone(), num_args),
             _ => panic!("calling non-function and non-builtin"),
         }
     }
@@ -424,7 +420,7 @@ impl<'a> VirtualMachine<'a> {
         let right = self.pop();
         let left = self.pop();
 
-        match (left, right) {
+        match (left.clone(), right.clone()) {
             (Object::Integer(left_value), Object::Integer(right_value)) => {
                 self.execute_integer_comparison(
                     op,
@@ -463,23 +459,23 @@ impl<'a> VirtualMachine<'a> {
     // TODO:
     // func (vm *VM) executePostfixOperator(op code.Opcode, ins code.Instructions, ip int)
 
-    fn build_array(&self, start_index: usize, end_index: usize) -> Object {
+    fn build_array(&'a self, start_index: usize, end_index: usize) -> Object<'a> {
         let elements = self.stack[start_index..end_index]
             .iter()
-            .collect::<Vec<&Object>>();
+            .collect::<Vec<&Object<'a>>>();
 
         Object::Array(elements)
     }
 
-    fn build_hash(&self, start_index: usize, end_index: usize) -> Object {
-        let mut pairs: HashMap<HashKey, HashPair> = HashMap::new();
+    fn build_hash(&'a self, start_index: usize, end_index: usize) -> Object<'a> {
+        let mut pairs: HashMap<HashKey<'a>, HashPair<'a>> = HashMap::new();
 
         for i in (start_index..end_index).step_by(2) {
             let key = &self.stack[i];
             let object_type = key.object_type();
             let hash_key = HashKey {
                 object_type,
-                value: *key,
+                value: key.clone(),
             };
             let value = &self.stack[i + 1];
 
@@ -487,10 +483,10 @@ impl<'a> VirtualMachine<'a> {
         }
         let hash_obj = HashObject { pairs };
 
-        Object::Hash(&hash_obj)
+        Object::Hash(hash_obj)
     }
 
-    fn execute_index_expr(&mut self, left: Object, index: Object) {
+    fn execute_index_expr(&mut self, left: Object<'a>, index: Object<'a>) {
         match left {
             Object::Array(array_elements) => {
                 if let Object::Integer(index_value) = index {
@@ -522,12 +518,13 @@ impl<'a> VirtualMachine<'a> {
 
     fn execute_hash_index(&mut self, hash: Object<'a>, index: Object<'a>) {
         if let Object::Hash(hash_object) = hash {
-            let hash_key_value = match index {
-                Object::Str(ref string) => Object::Str(string.clone()).hash_key(),
-                Object::Boolean(ref boolean) => Object::Boolean(*boolean).hash_key(),
-                Object::Integer(ref integer) => Object::Integer(*integer).hash_key(),
-                _ => panic!("unusable as hash key: {:?}", index),
-            };
+            // TODO: come back to this
+            // let hash_key_value = match index {
+            //     Object::Str(ref string) => Object::Str(string.clone()).hash_key(),
+            //     Object::Boolean(ref boolean) => Object::Boolean(*boolean).hash_key(),
+            //     Object::Integer(ref integer) => Object::Integer(*integer).hash_key(),
+            //     _ => panic!("unusable as hash key: {:?}", index),
+            // };
 
             let hash_key = HashKey {
                 object_type: index.object_type(),
@@ -544,15 +541,16 @@ impl<'a> VirtualMachine<'a> {
     }
 
     fn call_closure(&mut self, closure: Object<'a>, num_args: usize) {
-        if let Object::Closure(ref cl) = closure {
+        if let Object::Closure(cl) = closure {
             if num_args != cl.func.num_params {
                 panic!(
                     "wrong number of arguments. Expected: {}. Got: {}",
                     cl.func.num_params, num_args
                 );
             }
-            let frame = Frame::new(**cl, self.sp as i64 - num_args as i64);
+            let frame = Frame::new(&cl, self.sp as i64 - num_args as i64);
             self.push_frame(frame);
+
             self.sp = frame.base_pointer as u64 + cl.func.num_locals as u64;
         } else {
             panic!("expected closure for call_closure, got {:?}", closure);
@@ -567,7 +565,7 @@ impl<'a> VirtualMachine<'a> {
             }
             self.sp -= num_free as u64;
             self.push(Object::Closure(&ClosureObject {
-                func: **function,
+                func: function,
                 free,
             }));
         } else {
@@ -578,7 +576,7 @@ impl<'a> VirtualMachine<'a> {
         }
     }
 
-    fn call_builtin(&mut self, builtin: Object<'a>, num_args: usize) {
+    fn call_builtin(&'a mut self, builtin: Object<'a>, num_args: usize) {
         if let Object::Builtin(ref builtin_func) = builtin {
             let args_start = self.sp as usize - num_args;
             let args = &self.stack[args_start..self.sp as usize];
@@ -648,10 +646,10 @@ mod tests {
         }
     }
 
-    fn parse(input: String) -> RootNode {
+    fn parse(input: String) -> Node {
         let lexer = Lexer::new(input);
         let mut parser = Parser::new(lexer);
-        parser.parse_program()
+        Node::Root(parser.parse_program())
     }
 
     enum Expected<'a> {
@@ -665,7 +663,7 @@ mod tests {
         Error(String),
     }
 
-    fn test_expected_object(expected: Expected, actual: Object) {
+    fn test_expected_object<'a>(expected: Expected<'a>, actual: Object<'a>) {
         match expected {
             Expected::Integer(expected) => test_integer_object(expected, &actual),
             Expected::Boolean(expected) => test_boolean_object(expected, &actual),
@@ -1134,15 +1132,39 @@ mod tests {
 
     #[test]
     fn test_hash_literals() {
-        let empty_hash = HashMap::new();
+        let empty_hash: HashMap<HashKey, i64> = HashMap::new();
 
         let mut hash_one = HashMap::new();
-        hash_one.insert(Object::Integer(1).hash_key(), 2);
-        hash_one.insert(Object::Integer(2).hash_key(), 3);
+        hash_one.insert(
+            HashKey {
+                object_type: "",
+                value: Object::Integer(1),
+            },
+            2,
+        );
+        hash_one.insert(
+            HashKey {
+                object_type: "",
+                value: Object::Integer(2),
+            },
+            3,
+        );
 
         let mut hash_two = HashMap::new();
-        hash_two.insert(Object::Integer(2).hash_key(), 4);
-        hash_two.insert(Object::Integer(6).hash_key(), 16);
+        hash_two.insert(
+            HashKey {
+                object_type: "",
+                value: Object::Integer(2),
+            },
+            4,
+        );
+        hash_two.insert(
+            HashKey {
+                object_type: "",
+                value: Object::Integer(6),
+            },
+            16,
+        );
 
         let tests = vec![
             VmTestCase {

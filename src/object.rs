@@ -8,6 +8,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
 use std::fmt;
 use std::hash::{Hash, Hasher};
+use std::marker::PhantomData;
 
 #[derive(Clone)]
 pub enum Object<'a> {
@@ -15,13 +16,13 @@ pub enum Object<'a> {
     Boolean(bool),
     Str(String),
     Array(Vec<&'a Object<'a>>),
-    Hash(&'a HashObject<'a>),
+    Hash(HashObject<'a>),
     Function(&'a FunctionObject<'a>),
     Builtin(&'a BuiltinObject<'a>),
     Null,
     ReturnValue(&'a Object<'a>),
     Error(String),
-    CompiledFunc(&'a CompiledFuncObject),
+    CompiledFunc(&'a CompiledFuncObject<'a>),
     Closure(&'a ClosureObject<'a>),
 }
 
@@ -32,7 +33,7 @@ impl<'a> PartialEq for Object<'a> {
             (Object::Boolean(a), Object::Boolean(b)) => a == b,
             (Object::Str(a), Object::Str(b)) => a == b,
             (Object::Array(a), Object::Array(b)) => a == b,
-            (Object::Hash(a), Object::Hash(b)) => std::ptr::eq(*a, *b),
+            (Object::Hash(a), Object::Hash(b)) => a == b,
             (Object::Function(a), Object::Function(b)) => std::ptr::eq(*a, *b),
             (Object::Builtin(a), Object::Builtin(b)) => a == b,
             (Object::Null, Object::Null) => true,
@@ -58,7 +59,7 @@ impl<'a> Hash for Object<'a> {
                     std::ptr::hash(*elem, state);
                 }
             }
-            Object::Hash(value) => std::ptr::hash(*value, state),
+            Object::Hash(value) => std::ptr::hash(value, state),
             Object::Function(value) => std::ptr::hash(*value, state),
             Object::Builtin(value) => {
                 let mut hasher = DefaultHasher::new();
@@ -154,15 +155,27 @@ pub struct Null {}
 /// bindings
 // TODO: check back in on this comment after implementing.
 #[derive(Debug)]
-pub struct CompiledFuncObject {
+pub struct CompiledFuncObject<'a> {
     pub instructions: bytecode::Instructions,
     pub num_locals: usize,
     pub num_params: usize,
+    _marker: PhantomData<&'a ()>,
+}
+
+impl<'a> CompiledFuncObject<'a> {
+    pub fn new(instructions: bytecode::Instructions, num_locals: usize, num_params: usize) -> Self {
+        CompiledFuncObject {
+            instructions,
+            num_locals,
+            num_params,
+            _marker: PhantomData,
+        }
+    }
 }
 
 #[derive(Debug)]
 pub struct ClosureObject<'a> {
-    pub func: CompiledFuncObject,
+    pub func: &'a CompiledFuncObject<'a>,
     pub free: Vec<Object<'a>>,
 }
 
@@ -183,13 +196,13 @@ pub struct HashKey<'a> {
     pub value: Object<'a>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct HashPair<'a> {
     pub key: &'a Object<'a>,
     pub value: &'a Object<'a>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HashObject<'a> {
     pub pairs: HashMap<HashKey<'a>, HashPair<'a>>,
 }
@@ -359,7 +372,7 @@ mod tests {
             },
         );
         let hash_obj = HashObject { pairs };
-        let h = Object::Hash(&hash_obj);
+        let h = Object::Hash(hash_obj);
 
         assert_eq!(
             h.object_type(),
@@ -419,13 +432,9 @@ mod tests {
 
     #[test]
     fn test_closure() {
-        let compiled_func = CompiledFuncObject {
-            instructions: Instructions::new(vec![]),
-            num_locals: 0,
-            num_params: 0,
-        };
+        let compiled_func = CompiledFuncObject::new(Instructions::new(vec![]), 0, 0);
         let closure = ClosureObject {
-            func: compiled_func,
+            func: &compiled_func,
             free: vec![],
         };
         let cl = Object::Closure(&closure);
@@ -449,11 +458,11 @@ mod tests {
 
     #[test]
     fn test_compiled_function() {
-        let cf = CompiledFuncObject {
-            instructions: Instructions::new(Vec::from("OpDoesntMatter".as_bytes())),
-            num_locals: 1,
-            num_params: 1,
-        };
+        let cf = CompiledFuncObject::new(
+            Instructions::new(Vec::from("OpDoesntMatter".as_bytes())),
+            1,
+            1,
+        );
         let compiled_func = Object::CompiledFunc(&cf); // Assuming Object::CompiledFunc takes a reference to CompiledFuncObject
 
         assert_eq!(
