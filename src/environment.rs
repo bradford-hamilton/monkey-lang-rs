@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 /// Environment holds a store of key value pairs and a an "outer", enclosing environment.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Environment<'a> {
     store: HashMap<String, Object<'a>>,
     outer: Option<Rc<Environment<'a>>>,
@@ -44,7 +44,7 @@ mod tests {
     #[test]
     fn test_environments() {
         let mut outer_env = Environment::new();
-        let mut env = Environment::new_enclosed(outer_env);
+        let mut env = Environment::new_enclosed(outer_env.clone());
         env.set(
             "innerKey".to_string(),
             Object::Str("innerValue".to_string()),

@@ -1218,27 +1218,58 @@ mod tests {
 
     #[test]
     fn test_functions() {
+        let complied_func_1 = CompiledFuncObject::new(
+            Instructions::new(
+                vec![
+                    make_instruction(Opcode::OpConstant, vec![0]),
+                    make_instruction(Opcode::OpConstant, vec![1]),
+                    make_instruction(Opcode::OpAdd, vec![]),
+                    make_instruction(Opcode::OpReturnValue, vec![]),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            ),
+            0,
+            0,
+        );
+        let compiled_func_2 = CompiledFuncObject::new(
+            Instructions::new(
+                vec![
+                    make_instruction(Opcode::OpConstant, vec![0]),
+                    make_instruction(Opcode::OpConstant, vec![1]),
+                    make_instruction(Opcode::OpAdd, vec![]),
+                    make_instruction(Opcode::OpReturnValue, vec![]),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            ),
+            0,
+            0,
+        );
+        let compiled_func_3 = CompiledFuncObject::new(
+            Instructions::new(
+                vec![
+                    make_instruction(Opcode::OpConstant, vec![0]),
+                    make_instruction(Opcode::OpPop, vec![]),
+                    make_instruction(Opcode::OpConstant, vec![1]),
+                    make_instruction(Opcode::OpReturnValue, vec![]),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            ),
+            0,
+            0,
+        );
         let tests = vec![
             CompilerTestCase {
                 input: "func() { return 5 + 10 }".to_string(),
                 expected_constants: vec![
                     Object::Integer(5),
                     Object::Integer(10),
-                    Object::CompiledFunc(&CompiledFuncObject::new(
-                        Instructions::new(
-                            vec![
-                                make_instruction(Opcode::OpConstant, vec![0]),
-                                make_instruction(Opcode::OpConstant, vec![1]),
-                                make_instruction(Opcode::OpAdd, vec![]),
-                                make_instruction(Opcode::OpReturnValue, vec![]),
-                            ]
-                            .into_iter()
-                            .flatten()
-                            .collect(),
-                        ),
-                        0,
-                        0,
-                    )),
+                    Object::CompiledFunc(&complied_func_1),
                 ],
                 expected_instructions: vec![
                     make_instruction(Opcode::OpClosure, vec![2, 0]),
@@ -1253,21 +1284,7 @@ mod tests {
                 expected_constants: vec![
                     Object::Integer(5),
                     Object::Integer(10),
-                    Object::CompiledFunc(&CompiledFuncObject::new(
-                        Instructions::new(
-                            vec![
-                                make_instruction(Opcode::OpConstant, vec![0]),
-                                make_instruction(Opcode::OpConstant, vec![1]),
-                                make_instruction(Opcode::OpAdd, vec![]),
-                                make_instruction(Opcode::OpReturnValue, vec![]),
-                            ]
-                            .into_iter()
-                            .flatten()
-                            .collect(),
-                        ),
-                        0,
-                        0,
-                    )),
+                    Object::CompiledFunc(&compiled_func_2),
                 ],
                 expected_instructions: vec![
                     make_instruction(Opcode::OpClosure, vec![2, 0]),
@@ -1282,21 +1299,7 @@ mod tests {
                 expected_constants: vec![
                     Object::Integer(1),
                     Object::Integer(2),
-                    Object::CompiledFunc(&CompiledFuncObject::new(
-                        Instructions::new(
-                            vec![
-                                make_instruction(Opcode::OpConstant, vec![0]),
-                                make_instruction(Opcode::OpPop, vec![]),
-                                make_instruction(Opcode::OpConstant, vec![1]),
-                                make_instruction(Opcode::OpReturnValue, vec![]),
-                            ]
-                            .into_iter()
-                            .flatten()
-                            .collect(),
-                        ),
-                        0,
-                        0,
-                    )),
+                    Object::CompiledFunc(&compiled_func_3),
                 ],
                 expected_instructions: vec![
                     make_instruction(Opcode::OpClosure, vec![2, 0]),
@@ -1313,24 +1316,68 @@ mod tests {
 
     #[test]
     fn test_function_calls() {
+        let compiled_func_1 = CompiledFuncObject::new(
+            Instructions::new(
+                vec![
+                    make_instruction(Opcode::OpConstant, vec![0]),
+                    make_instruction(Opcode::OpReturnValue, vec![]),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            ),
+            0,
+            0,
+        );
+        let compiled_func_2 = CompiledFuncObject::new(
+            Instructions::new(
+                vec![
+                    make_instruction(Opcode::OpConstant, vec![0]),
+                    make_instruction(Opcode::OpReturnValue, vec![]),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            ),
+            0,
+            0,
+        );
+        let compiled_func_3 = CompiledFuncObject::new(
+            Instructions::new(
+                vec![
+                    make_instruction(Opcode::OpGetLocal, vec![0]),
+                    make_instruction(Opcode::OpReturnValue, vec![]),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            ),
+            0,
+            0,
+        );
+        let compiled_func_4 = CompiledFuncObject::new(
+            Instructions::new(
+                vec![
+                    make_instruction(Opcode::OpGetLocal, vec![0]),
+                    make_instruction(Opcode::OpPop, vec![]),
+                    make_instruction(Opcode::OpGetLocal, vec![1]),
+                    make_instruction(Opcode::OpPop, vec![]),
+                    make_instruction(Opcode::OpGetLocal, vec![2]),
+                    make_instruction(Opcode::OpReturnValue, vec![]),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            ),
+            0,
+            0,
+        );
         let tests = vec![
             CompilerTestCase {
                 input: "func() { 24 }();".to_string(),
                 expected_constants: vec![
                     Object::Integer(24),
-                    Object::CompiledFunc(&CompiledFuncObject::new(
-                        Instructions::new(
-                            vec![
-                                make_instruction(Opcode::OpConstant, vec![0]),
-                                make_instruction(Opcode::OpReturnValue, vec![]),
-                            ]
-                            .into_iter()
-                            .flatten()
-                            .collect(),
-                        ),
-                        0,
-                        0,
-                    )),
+                    Object::CompiledFunc(&compiled_func_1),
                 ],
                 expected_instructions: vec![
                     make_instruction(Opcode::OpClosure, vec![1, 0]),
@@ -1345,19 +1392,7 @@ mod tests {
                 input: "let noArg = func() { 24 }; noArg();".to_string(),
                 expected_constants: vec![
                     Object::Integer(24),
-                    Object::CompiledFunc(&CompiledFuncObject::new(
-                        Instructions::new(
-                            vec![
-                                make_instruction(Opcode::OpConstant, vec![0]),
-                                make_instruction(Opcode::OpReturnValue, vec![]),
-                            ]
-                            .into_iter()
-                            .flatten()
-                            .collect(),
-                        ),
-                        0,
-                        0,
-                    )),
+                    Object::CompiledFunc(&compiled_func_2),
                 ],
                 expected_instructions: vec![
                     make_instruction(Opcode::OpClosure, vec![1, 0]),
@@ -1373,19 +1408,7 @@ mod tests {
             CompilerTestCase {
                 input: "let oneArg = func(a) { a }; oneArg(24);".to_string(),
                 expected_constants: vec![
-                    Object::CompiledFunc(&CompiledFuncObject::new(
-                        Instructions::new(
-                            vec![
-                                make_instruction(Opcode::OpGetLocal, vec![0]),
-                                make_instruction(Opcode::OpReturnValue, vec![]),
-                            ]
-                            .into_iter()
-                            .flatten()
-                            .collect(),
-                        ),
-                        0,
-                        0,
-                    )),
+                    Object::CompiledFunc(&compiled_func_3),
                     Object::Integer(24),
                 ],
                 expected_instructions: vec![
@@ -1403,23 +1426,7 @@ mod tests {
             CompilerTestCase {
                 input: "let manyArg = func(a, b, c) { a; b; c }; manyArg(24, 25, 26);".to_string(),
                 expected_constants: vec![
-                    Object::CompiledFunc(&CompiledFuncObject::new(
-                        Instructions::new(
-                            vec![
-                                make_instruction(Opcode::OpGetLocal, vec![0]),
-                                make_instruction(Opcode::OpPop, vec![]),
-                                make_instruction(Opcode::OpGetLocal, vec![1]),
-                                make_instruction(Opcode::OpPop, vec![]),
-                                make_instruction(Opcode::OpGetLocal, vec![2]),
-                                make_instruction(Opcode::OpReturnValue, vec![]),
-                            ]
-                            .into_iter()
-                            .flatten()
-                            .collect(),
-                        ),
-                        0,
-                        0,
-                    )),
+                    Object::CompiledFunc(&compiled_func_4),
                     Object::Integer(24),
                     Object::Integer(25),
                     Object::Integer(26),
@@ -1511,18 +1518,19 @@ mod tests {
 
     #[test]
     fn test_functions_without_return_value() {
+        let compiled_func_1 = CompiledFuncObject::new(
+            Instructions::new(
+                vec![make_instruction(Opcode::OpReturn, vec![])]
+                    .into_iter()
+                    .flatten()
+                    .collect(),
+            ),
+            0,
+            0,
+        );
         let tests = vec![CompilerTestCase {
             input: "func() { }".to_string(),
-            expected_constants: vec![Object::CompiledFunc(&CompiledFuncObject::new(
-                Instructions::new(
-                    vec![make_instruction(Opcode::OpReturn, vec![])]
-                        .into_iter()
-                        .flatten()
-                        .collect(),
-                ),
-                0,
-                0,
-            ))],
+            expected_constants: vec![Object::CompiledFunc(&compiled_func_1)],
             expected_instructions: vec![
                 make_instruction(Opcode::OpClosure, vec![0, 0]),
                 make_instruction(Opcode::OpPop, vec![]),
@@ -1537,6 +1545,53 @@ mod tests {
 
     #[test]
     fn test_let_statement_scopes() {
+        let compiled_func_1 = CompiledFuncObject::new(
+            Instructions::new(
+                vec![
+                    make_instruction(Opcode::OpGetGlobal, vec![0]),
+                    make_instruction(Opcode::OpReturnValue, vec![]),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            ),
+            0,
+            0,
+        );
+        let compiled_func_2 = CompiledFuncObject::new(
+            Instructions::new(
+                vec![
+                    make_instruction(Opcode::OpConstant, vec![0]),
+                    make_instruction(Opcode::OpSetLocal, vec![0]),
+                    make_instruction(Opcode::OpGetLocal, vec![0]),
+                    make_instruction(Opcode::OpReturnValue, vec![]),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            ),
+            0,
+            0,
+        );
+        let compiled_func_3 = CompiledFuncObject::new(
+            Instructions::new(
+                vec![
+                    make_instruction(Opcode::OpConstant, vec![0]),
+                    make_instruction(Opcode::OpSetLocal, vec![0]),
+                    make_instruction(Opcode::OpConstant, vec![1]),
+                    make_instruction(Opcode::OpSetLocal, vec![1]),
+                    make_instruction(Opcode::OpGetLocal, vec![0]),
+                    make_instruction(Opcode::OpGetLocal, vec![1]),
+                    make_instruction(Opcode::OpAdd, vec![]),
+                    make_instruction(Opcode::OpReturnValue, vec![]),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            ),
+            0,
+            0,
+        );
         let tests = vec![
             CompilerTestCase {
                 input: "
@@ -1546,19 +1601,7 @@ mod tests {
                 .to_string(),
                 expected_constants: vec![
                     Object::Integer(55),
-                    Object::CompiledFunc(&CompiledFuncObject::new(
-                        Instructions::new(
-                            vec![
-                                make_instruction(Opcode::OpGetGlobal, vec![0]),
-                                make_instruction(Opcode::OpReturnValue, vec![]),
-                            ]
-                            .into_iter()
-                            .flatten()
-                            .collect(),
-                        ),
-                        0,
-                        0,
-                    )),
+                    Object::CompiledFunc(&compiled_func_1),
                 ],
                 expected_instructions: vec![
                     make_instruction(Opcode::OpConstant, vec![0]),
@@ -1580,21 +1623,7 @@ mod tests {
                 .to_string(),
                 expected_constants: vec![
                     Object::Integer(55),
-                    Object::CompiledFunc(&CompiledFuncObject::new(
-                        Instructions::new(
-                            vec![
-                                make_instruction(Opcode::OpConstant, vec![0]),
-                                make_instruction(Opcode::OpSetLocal, vec![0]),
-                                make_instruction(Opcode::OpGetLocal, vec![0]),
-                                make_instruction(Opcode::OpReturnValue, vec![]),
-                            ]
-                            .into_iter()
-                            .flatten()
-                            .collect(),
-                        ),
-                        0,
-                        0,
-                    )),
+                    Object::CompiledFunc(&compiled_func_2),
                 ],
                 expected_instructions: vec![
                     make_instruction(Opcode::OpClosure, vec![1, 0]),
@@ -1616,25 +1645,7 @@ mod tests {
                 expected_constants: vec![
                     Object::Integer(55),
                     Object::Integer(77),
-                    Object::CompiledFunc(&CompiledFuncObject::new(
-                        Instructions::new(
-                            vec![
-                                make_instruction(Opcode::OpConstant, vec![0]),
-                                make_instruction(Opcode::OpSetLocal, vec![0]),
-                                make_instruction(Opcode::OpConstant, vec![1]),
-                                make_instruction(Opcode::OpSetLocal, vec![1]),
-                                make_instruction(Opcode::OpGetLocal, vec![0]),
-                                make_instruction(Opcode::OpGetLocal, vec![1]),
-                                make_instruction(Opcode::OpAdd, vec![]),
-                                make_instruction(Opcode::OpReturnValue, vec![]),
-                            ]
-                            .into_iter()
-                            .flatten()
-                            .collect(),
-                        ),
-                        0,
-                        0,
-                    )),
+                    Object::CompiledFunc(&compiled_func_3),
                 ],
                 expected_instructions: vec![
                     make_instruction(Opcode::OpClosure, vec![2, 0]),
@@ -1651,6 +1662,53 @@ mod tests {
 
     #[test]
     fn test_const_statement_scopes() {
+        let compiled_func_1 = CompiledFuncObject::new(
+            Instructions::new(
+                vec![
+                    make_instruction(Opcode::OpGetGlobal, vec![0]),
+                    make_instruction(Opcode::OpReturnValue, vec![]),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            ),
+            0,
+            0,
+        );
+        let compiled_func_2 = CompiledFuncObject::new(
+            Instructions::new(
+                vec![
+                    make_instruction(Opcode::OpConstant, vec![0]),
+                    make_instruction(Opcode::OpSetLocal, vec![0]),
+                    make_instruction(Opcode::OpGetLocal, vec![0]),
+                    make_instruction(Opcode::OpReturnValue, vec![]),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            ),
+            0,
+            0,
+        );
+        let compiled_func_3 = CompiledFuncObject::new(
+            Instructions::new(
+                vec![
+                    make_instruction(Opcode::OpConstant, vec![0]),
+                    make_instruction(Opcode::OpSetLocal, vec![0]),
+                    make_instruction(Opcode::OpConstant, vec![1]),
+                    make_instruction(Opcode::OpSetLocal, vec![1]),
+                    make_instruction(Opcode::OpGetLocal, vec![0]),
+                    make_instruction(Opcode::OpGetLocal, vec![1]),
+                    make_instruction(Opcode::OpAdd, vec![]),
+                    make_instruction(Opcode::OpReturnValue, vec![]),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            ),
+            0,
+            0,
+        );
         let tests = vec![
             CompilerTestCase {
                 input: "
@@ -1660,19 +1718,7 @@ mod tests {
                 .to_string(),
                 expected_constants: vec![
                     Object::Integer(55),
-                    Object::CompiledFunc(&CompiledFuncObject::new(
-                        Instructions::new(
-                            vec![
-                                make_instruction(Opcode::OpGetGlobal, vec![0]),
-                                make_instruction(Opcode::OpReturnValue, vec![]),
-                            ]
-                            .into_iter()
-                            .flatten()
-                            .collect(),
-                        ),
-                        0,
-                        0,
-                    )),
+                    Object::CompiledFunc(&compiled_func_1),
                 ],
                 expected_instructions: vec![
                     make_instruction(Opcode::OpConstant, vec![0]),
@@ -1694,21 +1740,7 @@ mod tests {
                 .to_string(),
                 expected_constants: vec![
                     Object::Integer(55),
-                    Object::CompiledFunc(&CompiledFuncObject::new(
-                        Instructions::new(
-                            vec![
-                                make_instruction(Opcode::OpConstant, vec![0]),
-                                make_instruction(Opcode::OpSetLocal, vec![0]),
-                                make_instruction(Opcode::OpGetLocal, vec![0]),
-                                make_instruction(Opcode::OpReturnValue, vec![]),
-                            ]
-                            .into_iter()
-                            .flatten()
-                            .collect(),
-                        ),
-                        0,
-                        0,
-                    )),
+                    Object::CompiledFunc(&compiled_func_2),
                 ],
                 expected_instructions: vec![
                     make_instruction(Opcode::OpClosure, vec![1, 0]),
@@ -1730,25 +1762,7 @@ mod tests {
                 expected_constants: vec![
                     Object::Integer(55),
                     Object::Integer(77),
-                    Object::CompiledFunc(&CompiledFuncObject::new(
-                        Instructions::new(
-                            vec![
-                                make_instruction(Opcode::OpConstant, vec![0]),
-                                make_instruction(Opcode::OpSetLocal, vec![0]),
-                                make_instruction(Opcode::OpConstant, vec![1]),
-                                make_instruction(Opcode::OpSetLocal, vec![1]),
-                                make_instruction(Opcode::OpGetLocal, vec![0]),
-                                make_instruction(Opcode::OpGetLocal, vec![1]),
-                                make_instruction(Opcode::OpAdd, vec![]),
-                                make_instruction(Opcode::OpReturnValue, vec![]),
-                            ]
-                            .into_iter()
-                            .flatten()
-                            .collect(),
-                        ),
-                        0,
-                        0,
-                    )),
+                    Object::CompiledFunc(&compiled_func_3),
                 ],
                 expected_instructions: vec![
                     make_instruction(Opcode::OpClosure, vec![2, 0]),
@@ -1765,6 +1779,21 @@ mod tests {
 
     #[test]
     fn test_builtins() {
+        let compiled_func_1 = CompiledFuncObject::new(
+            Instructions::new(
+                vec![
+                    make_instruction(Opcode::OpGetBuiltin, vec![0]),
+                    make_instruction(Opcode::OpArray, vec![0]),
+                    make_instruction(Opcode::OpCall, vec![1]),
+                    make_instruction(Opcode::OpReturnValue, vec![]),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            ),
+            0,
+            0,
+        );
         let tests = vec![
             CompilerTestCase {
                 input: "
@@ -1795,21 +1824,7 @@ mod tests {
             },
             CompilerTestCase {
                 input: "func() { len([]) }".to_string(),
-                expected_constants: vec![Object::CompiledFunc(&CompiledFuncObject::new(
-                    Instructions::new(
-                        vec![
-                            make_instruction(Opcode::OpGetBuiltin, vec![0]),
-                            make_instruction(Opcode::OpArray, vec![0]),
-                            make_instruction(Opcode::OpCall, vec![1]),
-                            make_instruction(Opcode::OpReturnValue, vec![]),
-                        ]
-                        .into_iter()
-                        .flatten()
-                        .collect(),
-                    ),
-                    0,
-                    0,
-                ))],
+                expected_constants: vec![Object::CompiledFunc(&compiled_func_1)],
                 expected_instructions: vec![
                     make_instruction(Opcode::OpClosure, vec![0, 0]),
                     make_instruction(Opcode::OpPop, vec![]),
@@ -1825,6 +1840,135 @@ mod tests {
 
     #[test]
     fn test_closures() {
+        let compiled_func_1 = CompiledFuncObject::new(
+            Instructions::new(
+                vec![
+                    make_instruction(Opcode::OpGetFree, vec![0]),
+                    make_instruction(Opcode::OpGetLocal, vec![0]),
+                    make_instruction(Opcode::OpAdd, vec![]),
+                    make_instruction(Opcode::OpReturnValue, vec![]),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            ),
+            1,
+            1,
+        );
+        let compiled_func_2 = CompiledFuncObject::new(
+            Instructions::new(
+                vec![
+                    make_instruction(Opcode::OpGetLocal, vec![0]),
+                    make_instruction(Opcode::OpClosure, vec![0, 1]),
+                    make_instruction(Opcode::OpReturnValue, vec![]),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            ),
+            1,
+            1,
+        );
+        let compiled_func_3 = CompiledFuncObject::new(
+            Instructions::new(
+                vec![
+                    make_instruction(Opcode::OpGetFree, vec![0]),
+                    make_instruction(Opcode::OpGetFree, vec![1]),
+                    make_instruction(Opcode::OpAdd, vec![]),
+                    make_instruction(Opcode::OpGetLocal, vec![0]),
+                    make_instruction(Opcode::OpAdd, vec![]),
+                    make_instruction(Opcode::OpReturnValue, vec![]),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            ),
+            1,
+            1,
+        );
+        let compiled_func_4 = CompiledFuncObject::new(
+            Instructions::new(
+                vec![
+                    make_instruction(Opcode::OpGetFree, vec![0]),
+                    make_instruction(Opcode::OpGetLocal, vec![0]),
+                    make_instruction(Opcode::OpClosure, vec![0, 2]),
+                    make_instruction(Opcode::OpReturnValue, vec![]),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            ),
+            1,
+            1,
+        );
+        let compiled_func_5 = CompiledFuncObject::new(
+            Instructions::new(
+                vec![
+                    make_instruction(Opcode::OpGetLocal, vec![0]),
+                    make_instruction(Opcode::OpClosure, vec![1, 1]),
+                    make_instruction(Opcode::OpReturnValue, vec![]),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            ),
+            1,
+            1,
+        );
+        let compiled_func_6 = CompiledFuncObject::new(
+            Instructions::new(
+                vec![
+                    make_instruction(Opcode::OpConstant, vec![3]),
+                    make_instruction(Opcode::OpSetLocal, vec![0]),
+                    make_instruction(Opcode::OpGetGlobal, vec![0]),
+                    make_instruction(Opcode::OpGetFree, vec![0]),
+                    make_instruction(Opcode::OpAdd, vec![]),
+                    make_instruction(Opcode::OpGetFree, vec![1]),
+                    make_instruction(Opcode::OpAdd, vec![]),
+                    make_instruction(Opcode::OpGetLocal, vec![0]),
+                    make_instruction(Opcode::OpAdd, vec![]),
+                    make_instruction(Opcode::OpReturnValue, vec![]),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            ),
+            1,
+            1,
+        );
+        let compiled_func_7 = CompiledFuncObject::new(
+            Instructions::new(
+                vec![
+                    make_instruction(Opcode::OpConstant, vec![2]),
+                    make_instruction(Opcode::OpSetLocal, vec![0]),
+                    make_instruction(Opcode::OpGetFree, vec![0]),
+                    make_instruction(Opcode::OpGetLocal, vec![0]),
+                    make_instruction(Opcode::OpClosure, vec![4, 2]),
+                    make_instruction(Opcode::OpReturnValue, vec![]),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            ),
+            1,
+            1,
+        );
+        let compiled_func_8 = CompiledFuncObject::new(
+            Instructions::new(
+                vec![
+                    make_instruction(Opcode::OpConstant, vec![1]),
+                    make_instruction(Opcode::OpSetLocal, vec![0]),
+                    make_instruction(Opcode::OpGetLocal, vec![0]),
+                    make_instruction(Opcode::OpClosure, vec![5, 1]),
+                    make_instruction(Opcode::OpReturnValue, vec![]),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            ),
+            1,
+            1,
+        );
         let tests = vec![
             CompilerTestCase {
                 input: "
@@ -1836,35 +1980,8 @@ mod tests {
                 "
                 .to_string(),
                 expected_constants: vec![
-                    Object::CompiledFunc(&CompiledFuncObject::new(
-                        Instructions::new(
-                            vec![
-                                make_instruction(Opcode::OpGetFree, vec![0]),
-                                make_instruction(Opcode::OpGetLocal, vec![0]),
-                                make_instruction(Opcode::OpAdd, vec![]),
-                                make_instruction(Opcode::OpReturnValue, vec![]),
-                            ]
-                            .into_iter()
-                            .flatten()
-                            .collect(),
-                        ),
-                        1,
-                        1,
-                    )),
-                    Object::CompiledFunc(&CompiledFuncObject::new(
-                        Instructions::new(
-                            vec![
-                                make_instruction(Opcode::OpGetLocal, vec![0]),
-                                make_instruction(Opcode::OpClosure, vec![0, 1]),
-                                make_instruction(Opcode::OpReturnValue, vec![]),
-                            ]
-                            .into_iter()
-                            .flatten()
-                            .collect(),
-                        ),
-                        1,
-                        1,
-                    )),
+                    Object::CompiledFunc(&compiled_func_1),
+                    Object::CompiledFunc(&compiled_func_2),
                 ],
                 expected_instructions: vec![
                     make_instruction(Opcode::OpClosure, vec![1, 0]),
@@ -1886,52 +2003,9 @@ mod tests {
                 "
                 .to_string(),
                 expected_constants: vec![
-                    Object::CompiledFunc(&CompiledFuncObject::new(
-                        Instructions::new(
-                            vec![
-                                make_instruction(Opcode::OpGetFree, vec![0]),
-                                make_instruction(Opcode::OpGetFree, vec![1]),
-                                make_instruction(Opcode::OpAdd, vec![]),
-                                make_instruction(Opcode::OpGetLocal, vec![0]),
-                                make_instruction(Opcode::OpAdd, vec![]),
-                                make_instruction(Opcode::OpReturnValue, vec![]),
-                            ]
-                            .into_iter()
-                            .flatten()
-                            .collect(),
-                        ),
-                        1,
-                        1,
-                    )),
-                    Object::CompiledFunc(&CompiledFuncObject::new(
-                        Instructions::new(
-                            vec![
-                                make_instruction(Opcode::OpGetFree, vec![0]),
-                                make_instruction(Opcode::OpGetLocal, vec![0]),
-                                make_instruction(Opcode::OpClosure, vec![0, 2]),
-                                make_instruction(Opcode::OpReturnValue, vec![]),
-                            ]
-                            .into_iter()
-                            .flatten()
-                            .collect(),
-                        ),
-                        1,
-                        1,
-                    )),
-                    Object::CompiledFunc(&CompiledFuncObject::new(
-                        Instructions::new(
-                            vec![
-                                make_instruction(Opcode::OpGetLocal, vec![0]),
-                                make_instruction(Opcode::OpClosure, vec![1, 1]),
-                                make_instruction(Opcode::OpReturnValue, vec![]),
-                            ]
-                            .into_iter()
-                            .flatten()
-                            .collect(),
-                        ),
-                        1,
-                        1,
-                    )),
+                    Object::CompiledFunc(&compiled_func_3),
+                    Object::CompiledFunc(&compiled_func_4),
+                    Object::CompiledFunc(&compiled_func_5),
                 ],
                 expected_instructions: vec![
                     make_instruction(Opcode::OpClosure, vec![2, 0]),
@@ -1965,60 +2039,9 @@ mod tests {
                     Object::Integer(66),
                     Object::Integer(77),
                     Object::Integer(88),
-                    Object::CompiledFunc(&CompiledFuncObject::new(
-                        Instructions::new(
-                            vec![
-                                make_instruction(Opcode::OpConstant, vec![3]),
-                                make_instruction(Opcode::OpSetLocal, vec![0]),
-                                make_instruction(Opcode::OpGetGlobal, vec![0]),
-                                make_instruction(Opcode::OpGetFree, vec![0]),
-                                make_instruction(Opcode::OpAdd, vec![]),
-                                make_instruction(Opcode::OpGetFree, vec![1]),
-                                make_instruction(Opcode::OpAdd, vec![]),
-                                make_instruction(Opcode::OpGetLocal, vec![0]),
-                                make_instruction(Opcode::OpAdd, vec![]),
-                                make_instruction(Opcode::OpReturnValue, vec![]),
-                            ]
-                            .into_iter()
-                            .flatten()
-                            .collect(),
-                        ),
-                        1,
-                        1,
-                    )),
-                    Object::CompiledFunc(&CompiledFuncObject::new(
-                        Instructions::new(
-                            vec![
-                                make_instruction(Opcode::OpConstant, vec![2]),
-                                make_instruction(Opcode::OpSetLocal, vec![0]),
-                                make_instruction(Opcode::OpGetFree, vec![0]),
-                                make_instruction(Opcode::OpGetLocal, vec![0]),
-                                make_instruction(Opcode::OpClosure, vec![4, 2]),
-                                make_instruction(Opcode::OpReturnValue, vec![]),
-                            ]
-                            .into_iter()
-                            .flatten()
-                            .collect(),
-                        ),
-                        1,
-                        1,
-                    )),
-                    Object::CompiledFunc(&CompiledFuncObject::new(
-                        Instructions::new(
-                            vec![
-                                make_instruction(Opcode::OpConstant, vec![1]),
-                                make_instruction(Opcode::OpSetLocal, vec![0]),
-                                make_instruction(Opcode::OpGetLocal, vec![0]),
-                                make_instruction(Opcode::OpClosure, vec![5, 1]),
-                                make_instruction(Opcode::OpReturnValue, vec![]),
-                            ]
-                            .into_iter()
-                            .flatten()
-                            .collect(),
-                        ),
-                        1,
-                        1,
-                    )),
+                    Object::CompiledFunc(&compiled_func_6),
+                    Object::CompiledFunc(&compiled_func_7),
+                    Object::CompiledFunc(&compiled_func_8),
                 ],
                 expected_instructions: vec![
                     make_instruction(Opcode::OpConstant, vec![0]),
@@ -2036,8 +2059,59 @@ mod tests {
     }
 
     #[test]
-    fn test_recursive_functions() {
-        let tests = vec![
+    fn test_recursive_functions<'a>() {
+        let compiled_func_1 = CompiledFuncObject::new(
+            Instructions::new(
+                vec![
+                    make_instruction(Opcode::OpCurrentClosure, vec![]),
+                    make_instruction(Opcode::OpGetLocal, vec![0]),
+                    make_instruction(Opcode::OpConstant, vec![0]),
+                    make_instruction(Opcode::OpSub, vec![]),
+                    make_instruction(Opcode::OpCall, vec![1]),
+                    make_instruction(Opcode::OpReturnValue, vec![]),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            ),
+            1,
+            1,
+        );
+        let compiled_func_2 = CompiledFuncObject::new(
+            Instructions::new(
+                vec![
+                    make_instruction(Opcode::OpCurrentClosure, vec![]),
+                    make_instruction(Opcode::OpGetLocal, vec![0]),
+                    make_instruction(Opcode::OpConstant, vec![0]),
+                    make_instruction(Opcode::OpSub, vec![]),
+                    make_instruction(Opcode::OpCall, vec![1]),
+                    make_instruction(Opcode::OpReturnValue, vec![]),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            ),
+            1,
+            1,
+        );
+        let compiled_func_3 = CompiledFuncObject::new(
+            Instructions::new(
+                vec![
+                    make_instruction(Opcode::OpClosure, vec![1, 0]),
+                    make_instruction(Opcode::OpSetLocal, vec![0]),
+                    make_instruction(Opcode::OpGetLocal, vec![0]),
+                    make_instruction(Opcode::OpConstant, vec![2]),
+                    make_instruction(Opcode::OpCall, vec![1]),
+                    make_instruction(Opcode::OpReturnValue, vec![]),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            ),
+            1,
+            0,
+        );
+        let tests: Vec<CompilerTestCase> = vec![
             CompilerTestCase {
                 input: "
                     let countDown = func(x) { countDown(x - 1); };
@@ -2046,23 +2120,7 @@ mod tests {
                 .to_string(),
                 expected_constants: vec![
                     Object::Integer(1),
-                    Object::CompiledFunc(&CompiledFuncObject::new(
-                        Instructions::new(
-                            vec![
-                                make_instruction(Opcode::OpCurrentClosure, vec![]),
-                                make_instruction(Opcode::OpGetLocal, vec![0]),
-                                make_instruction(Opcode::OpConstant, vec![0]),
-                                make_instruction(Opcode::OpSub, vec![]),
-                                make_instruction(Opcode::OpCall, vec![1]),
-                                make_instruction(Opcode::OpReturnValue, vec![]),
-                            ]
-                            .into_iter()
-                            .flatten()
-                            .collect(),
-                        ),
-                        1,
-                        1,
-                    )),
+                    Object::CompiledFunc(&compiled_func_1),
                     Object::Integer(1),
                 ],
                 expected_instructions: vec![
@@ -2088,41 +2146,9 @@ mod tests {
                 .to_string(),
                 expected_constants: vec![
                     Object::Integer(1),
-                    Object::CompiledFunc(&CompiledFuncObject::new(
-                        Instructions::new(
-                            vec![
-                                make_instruction(Opcode::OpCurrentClosure, vec![]),
-                                make_instruction(Opcode::OpGetLocal, vec![0]),
-                                make_instruction(Opcode::OpConstant, vec![0]),
-                                make_instruction(Opcode::OpSub, vec![]),
-                                make_instruction(Opcode::OpCall, vec![1]),
-                                make_instruction(Opcode::OpReturnValue, vec![]),
-                            ]
-                            .into_iter()
-                            .flatten()
-                            .collect(),
-                        ),
-                        1,
-                        1,
-                    )),
+                    Object::CompiledFunc(&compiled_func_2),
                     Object::Integer(1),
-                    Object::CompiledFunc(&CompiledFuncObject::new(
-                        Instructions::new(
-                            vec![
-                                make_instruction(Opcode::OpClosure, vec![1, 0]),
-                                make_instruction(Opcode::OpSetLocal, vec![0]),
-                                make_instruction(Opcode::OpGetLocal, vec![0]),
-                                make_instruction(Opcode::OpConstant, vec![2]),
-                                make_instruction(Opcode::OpCall, vec![1]),
-                                make_instruction(Opcode::OpReturnValue, vec![]),
-                            ]
-                            .into_iter()
-                            .flatten()
-                            .collect(),
-                        ),
-                        1,
-                        0,
-                    )),
+                    Object::CompiledFunc(&compiled_func_3),
                 ],
                 expected_instructions: vec![
                     make_instruction(Opcode::OpClosure, vec![3, 0]),

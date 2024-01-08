@@ -1714,7 +1714,7 @@ mod tests {
             _ => panic!("Function expression is not an identifier"),
         };
 
-        test_identifier(&Expression::Identifier(*call_expr_function), "add");
+        test_identifier(&Expression::Identifier(call_expr_function.clone()), "add");
 
         assert_eq!(
             call_expr.arguments.len(),
@@ -1778,7 +1778,10 @@ mod tests {
                 _ => panic!("Function expression is not an identifier"),
             };
 
-            test_identifier(&Expression::Identifier(*call_expr_function), expected_ident);
+            test_identifier(
+                &Expression::Identifier(call_expr_function.clone()),
+                expected_ident,
+            );
 
             assert_eq!(
                 call_expr.arguments.len(),
@@ -2022,7 +2025,7 @@ mod tests {
             match hash_literal.pairs.get(&key) {
                 Some(Expression::Infix(infix_expr)) => {
                     test_infix_expression(
-                        &Expression::Infix(*infix_expr),
+                        &Expression::Infix(infix_expr.clone()),
                         left_val,
                         operator,
                         right_val,

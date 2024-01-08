@@ -23,7 +23,7 @@ pub enum Object<'a> {
     ReturnValue(&'a Object<'a>),
     Error(String),
     CompiledFunc(&'a CompiledFuncObject<'a>),
-    Closure(&'a ClosureObject<'a>),
+    Closure(ClosureObject<'a>),
 }
 
 impl<'a> PartialEq for Object<'a> {
@@ -40,7 +40,7 @@ impl<'a> PartialEq for Object<'a> {
             (Object::ReturnValue(a), Object::ReturnValue(b)) => a == b,
             (Object::Error(a), Object::Error(b)) => a == b,
             (Object::CompiledFunc(a), Object::CompiledFunc(b)) => std::ptr::eq(*a, *b),
-            (Object::Closure(a), Object::Closure(b)) => std::ptr::eq(*a, *b),
+            (Object::Closure(a), Object::Closure(b)) => a == b,
             _ => false,
         }
     }
@@ -70,7 +70,7 @@ impl<'a> Hash for Object<'a> {
             Object::ReturnValue(value) => std::ptr::hash(*value, state),
             Object::Error(value) => value.hash(state),
             Object::CompiledFunc(value) => std::ptr::hash(*value, state),
-            Object::Closure(value) => std::ptr::hash(*value, state),
+            Object::Closure(value) => std::ptr::hash(value, state),
         }
     }
 }
@@ -154,7 +154,7 @@ pub struct Null {}
 /// to the VM to allocate the correct amount of stack space ("hole") to save the local
 /// bindings
 // TODO: check back in on this comment after implementing.
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct CompiledFuncObject<'a> {
     pub instructions: bytecode::Instructions,
     pub num_locals: usize,
@@ -173,9 +173,9 @@ impl<'a> CompiledFuncObject<'a> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ClosureObject<'a> {
-    pub func: &'a CompiledFuncObject<'a>,
+    pub func: CompiledFuncObject<'a>,
     pub free: Vec<Object<'a>>,
 }
 
@@ -434,10 +434,10 @@ mod tests {
     fn test_closure() {
         let compiled_func = CompiledFuncObject::new(Instructions::new(vec![]), 0, 0);
         let closure = ClosureObject {
-            func: &compiled_func,
+            func: compiled_func,
             free: vec![],
         };
-        let cl = Object::Closure(&closure);
+        let cl = Object::Closure(closure);
 
         assert_eq!(
             cl.object_type(),
@@ -650,7 +650,7 @@ mod tests {
     fn test_builtins() {
         use crate::builtins;
 
-        fn null_builtin_func<'a>(args: &[Object]) -> Object<'a> {
+        fn null_builtin_func<'a>(_args: &[Object]) -> Object<'a> {
             Object::Null
         }
 

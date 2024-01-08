@@ -29,11 +29,11 @@ impl<'a> VirtualMachine<'a> {
     pub fn new(bytecode: Bytecode<'a>) -> Self {
         let main_func = CompiledFuncObject::new(bytecode.instructions, 0, 0);
         let main_closure = ClosureObject {
-            func: &main_func,
+            func: main_func,
             free: vec![],
         };
-        let main_frame = Frame::new(&main_closure, 0);
-        let mut frames: Vec<Frame<'_>> = Vec::with_capacity(MAX_FRAMES as usize);
+        let main_frame = Frame::new(main_closure, 0);
+        let mut frames: Vec<Frame> = Vec::with_capacity(MAX_FRAMES as usize);
 
         frames.push(main_frame);
 
@@ -54,16 +54,17 @@ impl<'a> VirtualMachine<'a> {
     }
 
     pub fn run(&mut self) {
-        let mut ip: usize;
-        let mut ins: &Instructions;
-        let mut op: Opcode;
+        // let mut ip: usize;
+        // let mut ins: &Instructions;
+        // let mut op: Opcode;
 
         while self.current_frame().ip < self.current_frame().instructions().len() - 1 {
+            let ip = self.current_frame().ip as usize;
+            let ins = self.current_frame().instructions();
+
             self.current_frame_mut().ip += 1;
 
-            ip = self.current_frame().ip as usize;
-            ins = self.current_frame().instructions();
-            op = Opcode::from(ins[ip]);
+            let op = Opcode::from(ins[ip]);
 
             match op {
                 Opcode::OpConstant => {
@@ -244,7 +245,7 @@ impl<'a> VirtualMachine<'a> {
                 }
 
                 Opcode::OpCurrentClosure => {
-                    let closure_object = Object::Closure(&self.current_frame().closure);
+                    let closure_object = Object::Closure(self.current_frame().closure);
                     self.push(closure_object);
                 }
 
@@ -548,7 +549,7 @@ impl<'a> VirtualMachine<'a> {
                     cl.func.num_params, num_args
                 );
             }
-            let frame = Frame::new(&cl, self.sp as i64 - num_args as i64);
+            let frame = Frame::new(cl.clone(), self.sp as i64 - num_args as i64);
             self.push_frame(frame);
 
             self.sp = frame.base_pointer as u64 + cl.func.num_locals as u64;
@@ -564,8 +565,8 @@ impl<'a> VirtualMachine<'a> {
                 free.push(self.stack[self.sp as usize - num_free + i].clone());
             }
             self.sp -= num_free as u64;
-            self.push(Object::Closure(&ClosureObject {
-                func: function,
+            self.push(Object::Closure(ClosureObject {
+                func: **function,
                 free,
             }));
         } else {
