@@ -15,14 +15,14 @@ pub enum Object<'a> {
     Integer(i64),
     Boolean(bool),
     Str(String),
-    Array(Vec<&'a Object<'a>>),
+    Array(Vec<Object<'a>>),
     Hash(HashObject<'a>),
     Function(&'a FunctionObject<'a>),
     Builtin(&'a BuiltinObject<'a>),
     Null,
     ReturnValue(&'a Object<'a>),
     Error(String),
-    CompiledFunc(&'a CompiledFuncObject<'a>),
+    CompiledFunc(CompiledFuncObject<'a>),
     Closure(ClosureObject<'a>),
 }
 
@@ -39,7 +39,7 @@ impl<'a> PartialEq for Object<'a> {
             (Object::Null, Object::Null) => true,
             (Object::ReturnValue(a), Object::ReturnValue(b)) => a == b,
             (Object::Error(a), Object::Error(b)) => a == b,
-            (Object::CompiledFunc(a), Object::CompiledFunc(b)) => std::ptr::eq(*a, *b),
+            (Object::CompiledFunc(a), Object::CompiledFunc(b)) => false, // TODO,
             (Object::Closure(a), Object::Closure(b)) => a == b,
             _ => false,
         }
@@ -56,7 +56,7 @@ impl<'a> Hash for Object<'a> {
             Object::Str(value) => value.hash(state),
             Object::Array(elements) => {
                 for elem in elements {
-                    std::ptr::hash(*elem, state);
+                    std::ptr::hash(elem, state);
                 }
             }
             Object::Hash(value) => std::ptr::hash(value, state),
@@ -69,7 +69,7 @@ impl<'a> Hash for Object<'a> {
             Object::Null => 0.hash(state),
             Object::ReturnValue(value) => std::ptr::hash(*value, state),
             Object::Error(value) => value.hash(state),
-            Object::CompiledFunc(value) => std::ptr::hash(*value, state),
+            Object::CompiledFunc(value) => std::ptr::hash(value, state),
             Object::Closure(value) => std::ptr::hash(value, state),
         }
     }
@@ -198,8 +198,8 @@ pub struct HashKey<'a> {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct HashPair<'a> {
-    pub key: &'a Object<'a>,
-    pub value: &'a Object<'a>,
+    pub key: Object<'a>,
+    pub value: Object<'a>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -214,7 +214,7 @@ impl<'a> HashObject<'a> {
         }
     }
 
-    pub fn insert(&mut self, hash_key: HashKey<'a>, key: &'a Object<'a>, value: &'a Object<'a>) {
+    pub fn insert(&mut self, hash_key: HashKey<'a>, key: Object<'a>, value: Object<'a>) {
         self.pairs.insert(hash_key, HashPair { key, value });
     }
 
@@ -367,8 +367,8 @@ mod tests {
                 value: (Object::Integer(1)),
             },
             HashPair {
-                key: &Object::Str("monkey".to_string()),
-                value: &Object::Str("lang".to_string()),
+                key: Object::Str("monkey".to_string()),
+                value: Object::Str("lang".to_string()),
             },
         );
         let hash_obj = HashObject { pairs };
@@ -391,11 +391,7 @@ mod tests {
 
     #[test]
     fn test_array() {
-        let elements = vec![
-            &Object::Integer(1),
-            &Object::Integer(2),
-            &Object::Integer(3),
-        ];
+        let elements = vec![Object::Integer(1), Object::Integer(2), Object::Integer(3)];
         let arr = Object::Array(elements);
 
         assert_eq!(
@@ -463,7 +459,7 @@ mod tests {
             1,
             1,
         );
-        let compiled_func = Object::CompiledFunc(&cf); // Assuming Object::CompiledFunc takes a reference to CompiledFuncObject
+        let compiled_func = Object::CompiledFunc(cf);
 
         assert_eq!(
             compiled_func.object_type(),

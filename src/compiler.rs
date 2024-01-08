@@ -459,7 +459,7 @@ impl<'a> Compiler<'a> {
                     num_locals,
                     func_literal.parameters.len(),
                 );
-                let compiled_func = Object::CompiledFunc(&compiled_func_object);
+                let compiled_func = Object::CompiledFunc(compiled_func_object);
 
                 let func_index = self.add_constant(compiled_func);
                 self.emit(
@@ -1269,7 +1269,7 @@ mod tests {
                 expected_constants: vec![
                     Object::Integer(5),
                     Object::Integer(10),
-                    Object::CompiledFunc(&complied_func_1),
+                    Object::CompiledFunc(complied_func_1),
                 ],
                 expected_instructions: vec![
                     make_instruction(Opcode::OpClosure, vec![2, 0]),
@@ -1284,7 +1284,7 @@ mod tests {
                 expected_constants: vec![
                     Object::Integer(5),
                     Object::Integer(10),
-                    Object::CompiledFunc(&compiled_func_2),
+                    Object::CompiledFunc(compiled_func_2),
                 ],
                 expected_instructions: vec![
                     make_instruction(Opcode::OpClosure, vec![2, 0]),
@@ -1299,7 +1299,7 @@ mod tests {
                 expected_constants: vec![
                     Object::Integer(1),
                     Object::Integer(2),
-                    Object::CompiledFunc(&compiled_func_3),
+                    Object::CompiledFunc(compiled_func_3),
                 ],
                 expected_instructions: vec![
                     make_instruction(Opcode::OpClosure, vec![2, 0]),
@@ -1377,7 +1377,7 @@ mod tests {
                 input: "func() { 24 }();".to_string(),
                 expected_constants: vec![
                     Object::Integer(24),
-                    Object::CompiledFunc(&compiled_func_1),
+                    Object::CompiledFunc(compiled_func_1),
                 ],
                 expected_instructions: vec![
                     make_instruction(Opcode::OpClosure, vec![1, 0]),
@@ -1392,7 +1392,7 @@ mod tests {
                 input: "let noArg = func() { 24 }; noArg();".to_string(),
                 expected_constants: vec![
                     Object::Integer(24),
-                    Object::CompiledFunc(&compiled_func_2),
+                    Object::CompiledFunc(compiled_func_2),
                 ],
                 expected_instructions: vec![
                     make_instruction(Opcode::OpClosure, vec![1, 0]),
@@ -1408,7 +1408,7 @@ mod tests {
             CompilerTestCase {
                 input: "let oneArg = func(a) { a }; oneArg(24);".to_string(),
                 expected_constants: vec![
-                    Object::CompiledFunc(&compiled_func_3),
+                    Object::CompiledFunc(compiled_func_3),
                     Object::Integer(24),
                 ],
                 expected_instructions: vec![
@@ -1426,7 +1426,7 @@ mod tests {
             CompilerTestCase {
                 input: "let manyArg = func(a, b, c) { a; b; c }; manyArg(24, 25, 26);".to_string(),
                 expected_constants: vec![
-                    Object::CompiledFunc(&compiled_func_4),
+                    Object::CompiledFunc(compiled_func_4),
                     Object::Integer(24),
                     Object::Integer(25),
                     Object::Integer(26),
@@ -1530,7 +1530,7 @@ mod tests {
         );
         let tests = vec![CompilerTestCase {
             input: "func() { }".to_string(),
-            expected_constants: vec![Object::CompiledFunc(&compiled_func_1)],
+            expected_constants: vec![Object::CompiledFunc(compiled_func_1)],
             expected_instructions: vec![
                 make_instruction(Opcode::OpClosure, vec![0, 0]),
                 make_instruction(Opcode::OpPop, vec![]),
@@ -1601,7 +1601,7 @@ mod tests {
                 .to_string(),
                 expected_constants: vec![
                     Object::Integer(55),
-                    Object::CompiledFunc(&compiled_func_1),
+                    Object::CompiledFunc(compiled_func_1),
                 ],
                 expected_instructions: vec![
                     make_instruction(Opcode::OpConstant, vec![0]),
@@ -1623,7 +1623,7 @@ mod tests {
                 .to_string(),
                 expected_constants: vec![
                     Object::Integer(55),
-                    Object::CompiledFunc(&compiled_func_2),
+                    Object::CompiledFunc(compiled_func_2),
                 ],
                 expected_instructions: vec![
                     make_instruction(Opcode::OpClosure, vec![1, 0]),
@@ -1645,7 +1645,7 @@ mod tests {
                 expected_constants: vec![
                     Object::Integer(55),
                     Object::Integer(77),
-                    Object::CompiledFunc(&compiled_func_3),
+                    Object::CompiledFunc(compiled_func_3),
                 ],
                 expected_instructions: vec![
                     make_instruction(Opcode::OpClosure, vec![2, 0]),
@@ -1718,7 +1718,7 @@ mod tests {
                 .to_string(),
                 expected_constants: vec![
                     Object::Integer(55),
-                    Object::CompiledFunc(&compiled_func_1),
+                    Object::CompiledFunc(compiled_func_1),
                 ],
                 expected_instructions: vec![
                     make_instruction(Opcode::OpConstant, vec![0]),
@@ -1740,7 +1740,7 @@ mod tests {
                 .to_string(),
                 expected_constants: vec![
                     Object::Integer(55),
-                    Object::CompiledFunc(&compiled_func_2),
+                    Object::CompiledFunc(compiled_func_2),
                 ],
                 expected_instructions: vec![
                     make_instruction(Opcode::OpClosure, vec![1, 0]),
@@ -1762,7 +1762,7 @@ mod tests {
                 expected_constants: vec![
                     Object::Integer(55),
                     Object::Integer(77),
-                    Object::CompiledFunc(&compiled_func_3),
+                    Object::CompiledFunc(compiled_func_3),
                 ],
                 expected_instructions: vec![
                     make_instruction(Opcode::OpClosure, vec![2, 0]),
@@ -1824,7 +1824,7 @@ mod tests {
             },
             CompilerTestCase {
                 input: "func() { len([]) }".to_string(),
-                expected_constants: vec![Object::CompiledFunc(&compiled_func_1)],
+                expected_constants: vec![Object::CompiledFunc(compiled_func_1)],
                 expected_instructions: vec![
                     make_instruction(Opcode::OpClosure, vec![0, 0]),
                     make_instruction(Opcode::OpPop, vec![]),
@@ -1980,8 +1980,8 @@ mod tests {
                 "
                 .to_string(),
                 expected_constants: vec![
-                    Object::CompiledFunc(&compiled_func_1),
-                    Object::CompiledFunc(&compiled_func_2),
+                    Object::CompiledFunc(compiled_func_1),
+                    Object::CompiledFunc(compiled_func_2),
                 ],
                 expected_instructions: vec![
                     make_instruction(Opcode::OpClosure, vec![1, 0]),
@@ -2003,9 +2003,9 @@ mod tests {
                 "
                 .to_string(),
                 expected_constants: vec![
-                    Object::CompiledFunc(&compiled_func_3),
-                    Object::CompiledFunc(&compiled_func_4),
-                    Object::CompiledFunc(&compiled_func_5),
+                    Object::CompiledFunc(compiled_func_3),
+                    Object::CompiledFunc(compiled_func_4),
+                    Object::CompiledFunc(compiled_func_5),
                 ],
                 expected_instructions: vec![
                     make_instruction(Opcode::OpClosure, vec![2, 0]),
@@ -2039,9 +2039,9 @@ mod tests {
                     Object::Integer(66),
                     Object::Integer(77),
                     Object::Integer(88),
-                    Object::CompiledFunc(&compiled_func_6),
-                    Object::CompiledFunc(&compiled_func_7),
-                    Object::CompiledFunc(&compiled_func_8),
+                    Object::CompiledFunc(compiled_func_6),
+                    Object::CompiledFunc(compiled_func_7),
+                    Object::CompiledFunc(compiled_func_8),
                 ],
                 expected_instructions: vec![
                     make_instruction(Opcode::OpConstant, vec![0]),
@@ -2120,7 +2120,7 @@ mod tests {
                 .to_string(),
                 expected_constants: vec![
                     Object::Integer(1),
-                    Object::CompiledFunc(&compiled_func_1),
+                    Object::CompiledFunc(compiled_func_1),
                     Object::Integer(1),
                 ],
                 expected_instructions: vec![
@@ -2146,9 +2146,9 @@ mod tests {
                 .to_string(),
                 expected_constants: vec![
                     Object::Integer(1),
-                    Object::CompiledFunc(&compiled_func_2),
+                    Object::CompiledFunc(compiled_func_2),
                     Object::Integer(1),
-                    Object::CompiledFunc(&compiled_func_3),
+                    Object::CompiledFunc(compiled_func_3),
                 ],
                 expected_instructions: vec![
                     make_instruction(Opcode::OpClosure, vec![3, 0]),

@@ -7,7 +7,7 @@ pub struct BuiltinObject<'a> {
 }
 
 impl<'a> BuiltinObject<'a> {
-    pub fn new(func: fn(&'a [Object<'a>]) -> Object<'a>) -> Self {
+    pub fn new(func: fn(&[Object<'a>]) -> Object<'a>) -> Self {
         BuiltinObject { func }
     }
 
@@ -45,7 +45,7 @@ pub fn get_builtin_by_name(name: &str) -> Option<BuiltinObject> {
         .map(|(_, builtin)| builtin.clone())
 }
 
-fn b_len<'a>(args: &'a [Object<'a>]) -> Object<'a> {
+fn b_len<'a>(args: &[Object<'a>]) -> Object<'a> {
     if args.len() != 1 {
         return Object::Error(new_error(format!(
             "Wrong number of arguments. Got: {}, Expected: 1",
@@ -63,7 +63,7 @@ fn b_len<'a>(args: &'a [Object<'a>]) -> Object<'a> {
     }
 }
 
-fn b_print<'a>(args: &'a [Object<'a>]) -> Object<'a> {
+fn b_print<'a>(args: &[Object<'a>]) -> Object<'a> {
     for arg in args {
         match arg {
             Object::Integer(value) => println!("{}", value),
@@ -98,7 +98,7 @@ fn b_print<'a>(args: &'a [Object<'a>]) -> Object<'a> {
     Object::Null
 }
 
-fn b_first<'a>(args: &'a [Object<'a>]) -> Object<'a> {
+fn b_first<'a>(args: &[Object<'a>]) -> Object<'a> {
     if args.len() != 1 {
         return Object::Error("Wrong number of arguments. Got: {}, Expected: 1".to_string());
     }
@@ -106,7 +106,7 @@ fn b_first<'a>(args: &'a [Object<'a>]) -> Object<'a> {
     match &args[0] {
         Object::Array(elements) => {
             if let Some(first_element) = elements.first() {
-                *first_element.clone()
+                first_element.clone()
             } else {
                 Object::Null
             }
@@ -115,7 +115,7 @@ fn b_first<'a>(args: &'a [Object<'a>]) -> Object<'a> {
     }
 }
 
-fn b_last<'a>(args: &'a [Object<'a>]) -> Object<'a> {
+fn b_last<'a>(args: &[Object<'a>]) -> Object<'a> {
     if args.len() != 1 {
         return Object::Error("Wrong number of arguments. Got: {}, Expected: 1".to_string());
     }
@@ -123,7 +123,7 @@ fn b_last<'a>(args: &'a [Object<'a>]) -> Object<'a> {
     match &args[0] {
         Object::Array(elements) => {
             if let Some(last_element) = elements.last() {
-                *last_element.clone()
+                last_element.clone()
             } else {
                 Object::Null
             }
@@ -132,7 +132,7 @@ fn b_last<'a>(args: &'a [Object<'a>]) -> Object<'a> {
     }
 }
 
-fn b_rest<'a>(args: &'a [Object<'a>]) -> Object<'a> {
+fn b_rest<'a>(args: &[Object<'a>]) -> Object<'a> {
     if args.len() != 1 {
         return Object::Error("Wrong number of arguments. Got: {}, Expected: 1".to_string());
     }
@@ -150,7 +150,7 @@ fn b_rest<'a>(args: &'a [Object<'a>]) -> Object<'a> {
     }
 }
 
-fn b_push<'a>(args: &'a [Object<'a>]) -> Object<'a> {
+fn b_push<'a>(args: &[Object<'a>]) -> Object<'a> {
     if args.len() != 2 {
         return Object::Error("Wrong number of arguments. Got: {}, Expected: 2".to_string());
     }
@@ -158,14 +158,14 @@ fn b_push<'a>(args: &'a [Object<'a>]) -> Object<'a> {
     match &args[0] {
         Object::Array(elements) => {
             let mut new_elements = elements.clone();
-            new_elements.push(&args[1].clone());
+            new_elements.push(args[1].clone());
             Object::Array(new_elements)
         }
         _ => Object::Error("Argument to `push` must be an Array.".to_string()),
     }
 }
 
-fn b_pop<'a>(args: &'a [Object<'a>]) -> Object<'a> {
+fn b_pop<'a>(args: &[Object<'a>]) -> Object<'a> {
     if args.len() != 1 {
         return Object::Error("Wrong number of arguments. Got: {}, Expected: 1".to_string());
     }
@@ -183,21 +183,19 @@ fn b_pop<'a>(args: &'a [Object<'a>]) -> Object<'a> {
     }
 }
 
-fn b_split<'a>(args: &'a [Object<'a>]) -> Object<'a> {
+fn b_split<'a>(args: &[Object<'a>]) -> Object<'a> {
     if args.len() != 2 {
         return Object::Error("Wrong number of arguments. Got: {}, Expected: 2".to_string());
     }
 
     if let Object::Str(string) = &args[0] {
         if let Object::Str(split_on) = &args[1] {
-            let split_owned: Vec<Object> = string
+            let split_results: Vec<Object<'a>> = string
                 .split(split_on)
                 .map(|s| Object::Str(s.to_string()))
                 .collect();
 
-            let split_refs: Vec<&Object> = split_owned.iter().collect();
-
-            Object::Array(split_refs)
+            Object::Array(split_results)
         } else {
             Object::Error("Second argument to `split` must be a String".to_string())
         }
@@ -206,7 +204,7 @@ fn b_split<'a>(args: &'a [Object<'a>]) -> Object<'a> {
     }
 }
 
-fn b_join<'a>(args: &'a [Object<'a>]) -> Object<'a> {
+fn b_join<'a>(args: &[Object<'a>]) -> Object<'a> {
     if args.len() != 2 {
         return Object::Error("Wrong number of arguments. Got: {}, Expected: 2".to_string());
     }
@@ -248,9 +246,9 @@ mod tests {
     #[test]
     fn test_len_builtin() {
         let arr = Object::Array(vec![
-            &Object::Integer(1),
-            &Object::Integer(2),
-            &Object::Integer(3),
+            Object::Integer(1),
+            Object::Integer(2),
+            Object::Integer(3),
         ]);
         let str = Object::Str("neat string".to_string());
         let len_builtin = get_builtin_by_name("len").unwrap();
@@ -288,9 +286,9 @@ mod tests {
     #[test]
     fn test_first_builtin() {
         let arr = Object::Array(vec![
-            &Object::Integer(99),
-            &Object::Integer(7),
-            &Object::Integer(356),
+            Object::Integer(99),
+            Object::Integer(7),
+            Object::Integer(356),
         ]);
         let empty_arr = Object::Array(Vec::new());
         let first_builtin = get_builtin_by_name("first").unwrap();
@@ -319,9 +317,9 @@ mod tests {
     #[test]
     fn test_last_builtin() {
         let arr = Object::Array(vec![
-            &Object::Integer(99),
-            &Object::Integer(7),
-            &Object::Integer(356),
+            Object::Integer(99),
+            Object::Integer(7),
+            Object::Integer(356),
         ]);
         let empty_arr = Object::Array(Vec::new());
         let str = Object::Str("neat string".to_string());
@@ -359,9 +357,9 @@ mod tests {
     #[test]
     fn test_rest_builtin() {
         let arr = Object::Array(vec![
-            &Object::Integer(99),
-            &Object::Integer(7),
-            &Object::Integer(356),
+            Object::Integer(99),
+            Object::Integer(7),
+            Object::Integer(356),
         ]);
         let empty_arr = Object::Array(Vec::new());
         let str = Object::Str("neat string".to_string());
@@ -399,9 +397,9 @@ mod tests {
     #[test]
     fn test_push_builtin() {
         let arr = Object::Array(vec![
-            &Object::Integer(99),
-            &Object::Integer(7),
-            &Object::Integer(356),
+            Object::Integer(99),
+            Object::Integer(7),
+            Object::Integer(356),
         ]);
         let new_el = Object::Integer(666);
         let str = Object::Str("neat string".to_string());
@@ -432,9 +430,9 @@ mod tests {
     #[test]
     fn test_pop_builtin() {
         let arr = Object::Array(vec![
-            &Object::Integer(99),
-            &Object::Integer(7),
-            &Object::Integer(356),
+            Object::Integer(99),
+            Object::Integer(7),
+            Object::Integer(356),
         ]);
         let empty_arr = Object::Array(Vec::new());
         let str = Object::Str("neat string".to_string());
@@ -501,10 +499,10 @@ mod tests {
     #[test]
     fn test_join_builtin() {
         let array = Object::Array(vec![
-            &Object::Str("My".to_string()),
-            &Object::Str("name".to_string()),
-            &Object::Str("is".to_string()),
-            &Object::Str("brad".to_string()),
+            Object::Str("My".to_string()),
+            Object::Str("name".to_string()),
+            Object::Str("is".to_string()),
+            Object::Str("brad".to_string()),
         ]);
         let join_on = Object::Str(" ".to_string());
         let not_an_array = Object::Str("not an array".to_string());

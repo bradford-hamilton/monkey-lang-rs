@@ -54,21 +54,20 @@ impl<'a> VirtualMachine<'a> {
     }
 
     pub fn run(&mut self) {
-        // let mut ip: usize;
-        // let mut ins: &Instructions;
-        // let mut op: Opcode;
+        let mut ip: i64;
+        let mut ins: &Instructions;
+        let mut op: Opcode;
 
         while self.current_frame().ip < self.current_frame().instructions().len() - 1 {
-            let ip = self.current_frame().ip as usize;
-            let ins = self.current_frame().instructions();
-
             self.current_frame_mut().ip += 1;
 
-            let op = Opcode::from(ins[ip]);
+            ip = self.current_frame().ip;
+            ins = self.current_frame().instructions();
+            op = Opcode::from(ins[ip as usize]);
 
             match op {
                 Opcode::OpConstant => {
-                    let const_index = read_uint16(&ins.0[ip + 1..]) as usize;
+                    let const_index = read_uint16(&ins.0[ip as usize + 1..]) as usize;
                     self.current_frame_mut().ip += 2;
 
                     let constant = self.constants[const_index];
@@ -112,12 +111,12 @@ impl<'a> VirtualMachine<'a> {
 
                 // TODO: Opcode::OpPlusPlus | Opcode::OpMinusMinus => { self.execute_postfix_operator(op, ins, ip); }
                 Opcode::OpJump => {
-                    let pos = read_uint16(&ins.0[ip + 1..]) as i64;
+                    let pos = read_uint16(&ins.0[ip as usize + 1..]) as i64;
                     self.current_frame_mut().ip = pos - 1;
                 }
 
                 Opcode::OpJumpNotTruthy => {
-                    let pos = read_uint16(&ins.0[ip + 1..]) as i64;
+                    let pos = read_uint16(&ins.0[ip as usize + 1..]) as i64;
                     self.current_frame_mut().ip += 2;
 
                     let condition = self.pop();
@@ -131,14 +130,14 @@ impl<'a> VirtualMachine<'a> {
                 }
 
                 Opcode::OpSetGlobal => {
-                    let global_index = read_uint16(&ins.0[ip + 1..]) as usize;
+                    let global_index = read_uint16(&ins.0[ip as usize + 1..]) as usize;
                     self.current_frame_mut().ip += 2;
                     let element = self.pop();
                     self.globals.insert(global_index, element);
                 }
 
                 Opcode::OpGetGlobal => {
-                    let global_index = read_uint16(&ins.0[ip + 1..]) as usize;
+                    let global_index = read_uint16(&ins.0[ip as usize + 1..]) as usize;
                     self.current_frame_mut().ip += 2;
                     if global_index >= self.globals.len() {
                         panic!("global index {} is out of bounds", global_index);
@@ -147,7 +146,7 @@ impl<'a> VirtualMachine<'a> {
                 }
 
                 Opcode::OpArray => {
-                    let num_elements = read_uint16(&ins.0[ip + 1..]) as usize;
+                    let num_elements = read_uint16(&ins.0[ip as usize + 1..]) as usize;
                     self.current_frame_mut().ip += 2;
 
                     let array = self.build_array(self.sp as usize - num_elements, self.sp as usize);
@@ -157,7 +156,7 @@ impl<'a> VirtualMachine<'a> {
                 }
 
                 Opcode::OpHash => {
-                    let num_elements = read_uint16(&ins.0[ip + 1..]) as usize;
+                    let num_elements = read_uint16(&ins.0[ip as usize + 1..]) as usize;
                     self.current_frame_mut().ip += 2;
 
                     let hash = self.build_hash(self.sp as usize - num_elements, self.sp as usize);
@@ -174,7 +173,7 @@ impl<'a> VirtualMachine<'a> {
                 }
 
                 Opcode::OpCall => {
-                    let num_args = read_uint8(&ins.0[ip + 1..]) as usize;
+                    let num_args = read_uint8(&ins.0[ip as usize + 1..]) as usize;
 
                     self.current_frame_mut().ip += 1;
                     self.execute_call(num_args);
@@ -196,7 +195,7 @@ impl<'a> VirtualMachine<'a> {
                 }
 
                 Opcode::OpSetLocal => {
-                    let local_index = read_uint8(&ins.0[ip + 1..]) as usize;
+                    let local_index = read_uint8(&ins.0[ip as usize + 1..]) as usize;
 
                     self.current_frame_mut().ip += 1;
 
@@ -207,7 +206,7 @@ impl<'a> VirtualMachine<'a> {
                 }
 
                 Opcode::OpGetLocal => {
-                    let local_index = read_uint8(&ins.0[ip + 1..]) as usize;
+                    let local_index = read_uint8(&ins.0[ip as usize + 1..]) as usize;
                     self.current_frame_mut().ip += 1;
 
                     let frame = self.current_frame();
@@ -218,7 +217,7 @@ impl<'a> VirtualMachine<'a> {
                 }
 
                 Opcode::OpGetBuiltin => {
-                    let builtin_index = read_uint8(&ins.0[ip + 1..]) as usize;
+                    let builtin_index = read_uint8(&ins.0[ip as usize + 1..]) as usize;
                     self.current_frame_mut().ip += 1;
 
                     let definition = BUILTINS[builtin_index].clone();
@@ -229,15 +228,15 @@ impl<'a> VirtualMachine<'a> {
                 }
 
                 Opcode::OpClosure => {
-                    let const_index = read_uint16(&ins.0[ip + 1..]) as usize;
-                    let num_free = read_uint8(&ins.0[ip + 3..]) as usize;
+                    let const_index = read_uint16(&ins.0[ip as usize + 1..]) as usize;
+                    let num_free = read_uint8(&ins.0[ip as usize + 3..]) as usize;
 
                     self.current_frame_mut().ip += 3;
                     self.push_closure(const_index, num_free);
                 }
 
                 Opcode::OpGetFree => {
-                    let free_index = read_uint8(&ins.0[ip + 1..]) as usize;
+                    let free_index = read_uint8(&ins.0[ip as usize + 1..]) as usize;
                     self.current_frame_mut().ip += 1;
 
                     let current_closure = self.current_frame().closure;
@@ -463,7 +462,8 @@ impl<'a> VirtualMachine<'a> {
     fn build_array(&'a self, start_index: usize, end_index: usize) -> Object<'a> {
         let elements = self.stack[start_index..end_index]
             .iter()
-            .collect::<Vec<&Object<'a>>>();
+            .cloned()
+            .collect::<Vec<Object<'a>>>();
 
         Object::Array(elements)
     }
@@ -472,13 +472,13 @@ impl<'a> VirtualMachine<'a> {
         let mut pairs: HashMap<HashKey<'a>, HashPair<'a>> = HashMap::new();
 
         for i in (start_index..end_index).step_by(2) {
-            let key = &self.stack[i];
+            let key = self.stack[i].clone();
             let object_type = key.object_type();
             let hash_key = HashKey {
                 object_type,
                 value: key.clone(),
             };
-            let value = &self.stack[i + 1];
+            let value = self.stack[i + 1].clone();
 
             pairs.insert(hash_key, HashPair { key, value });
         }
@@ -494,7 +494,7 @@ impl<'a> VirtualMachine<'a> {
                     // Create a new Vec<Object> by dereferencing and cloning each element
                     let cloned_elements = array_elements
                         .iter()
-                        .map(|&elem| elem.clone())
+                        .map(|elem| elem.clone())
                         .collect::<Vec<Object>>();
                     self.execute_array_index(cloned_elements, index_value);
                 } else {
@@ -550,7 +550,7 @@ impl<'a> VirtualMachine<'a> {
                 );
             }
             let frame = Frame::new(cl.clone(), self.sp as i64 - num_args as i64);
-            self.push_frame(frame);
+            self.push_frame(frame.clone());
 
             self.sp = frame.base_pointer as u64 + cl.func.num_locals as u64;
         } else {
@@ -559,14 +559,14 @@ impl<'a> VirtualMachine<'a> {
     }
 
     fn push_closure(&mut self, const_index: usize, num_free: usize) {
-        if let Object::CompiledFunc(ref function) = self.constants[const_index] {
+        if let Object::CompiledFunc(function) = self.constants[const_index].clone() {
             let mut free = Vec::with_capacity(num_free);
             for i in 0..num_free {
                 free.push(self.stack[self.sp as usize - num_free + i].clone());
             }
             self.sp -= num_free as u64;
             self.push(Object::Closure(ClosureObject {
-                func: **function,
+                func: function.clone(),
                 free,
             }));
         } else {
@@ -577,11 +577,13 @@ impl<'a> VirtualMachine<'a> {
         }
     }
 
-    fn call_builtin(&'a mut self, builtin: Object<'a>, num_args: usize) {
-        if let Object::Builtin(ref builtin_func) = builtin {
+    fn call_builtin(&mut self, builtin: Object<'a>, num_args: usize) {
+        if let Object::Builtin(builtin_func) = builtin {
             let args_start = self.sp as usize - num_args;
-            let args = &self.stack[args_start..self.sp as usize];
-            let result = builtin_func.call(args);
+            let result = {
+                let args = &self.stack[args_start..self.sp as usize];
+                builtin_func.call(args)
+            };
 
             self.sp -= num_args as u64 + 1;
 
