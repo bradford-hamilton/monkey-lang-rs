@@ -11,8 +11,27 @@ impl<'a> BuiltinObject<'a> {
         BuiltinObject { func }
     }
 
-    pub fn call(&self, args: &'a [Object<'a>]) -> Object<'a> {
+    pub fn call<'b: 'a>(&self, args: &'b [Object<'a>]) -> Object<'a> {
         (self.func)(args)
+    }
+
+    pub fn get_builtin_by_name(name: &str) -> Option<BuiltinObject<'a>> {
+        let builtins = vec![
+            ("len", BuiltinObject::new(b_len)),
+            ("print", BuiltinObject::new(b_print)),
+            ("first", BuiltinObject::new(b_first)),
+            ("last", BuiltinObject::new(b_last)),
+            ("rest", BuiltinObject::new(b_rest)),
+            ("push", BuiltinObject::new(b_push)),
+            ("pop", BuiltinObject::new(b_pop)),
+            ("split", BuiltinObject::new(b_split)),
+            ("join", BuiltinObject::new(b_join)),
+        ];
+
+        builtins
+            .into_iter()
+            .find(|(builtin_name, _)| *builtin_name == name)
+            .map(|(_, builtin)| builtin)
     }
 }
 
@@ -36,13 +55,6 @@ lazy_static! {
             ("join".to_string(), BuiltinObject::new(b_join)),
         ]
     };
-}
-
-pub fn get_builtin_by_name(name: &str) -> Option<BuiltinObject> {
-    BUILTINS
-        .iter()
-        .find(|(builtin_name, _)| builtin_name == name)
-        .map(|(_, builtin)| builtin.clone())
 }
 
 fn b_len<'a>(args: &[Object<'a>]) -> Object<'a> {
@@ -251,21 +263,18 @@ mod tests {
             Object::Integer(3),
         ]);
         let str = Object::Str("neat string".to_string());
-        let len_builtin = get_builtin_by_name("len").unwrap();
+        let len_builtin = BuiltinObject::get_builtin_by_name("len").unwrap();
 
-        // Testing with wrong number of arguments
+        let args1 = [arr.clone(), str.clone()];
+        let args2 = [arr.clone()];
+        let args3 = [str.clone()];
+
         assert_eq!(
-            len_builtin.call(&[arr, str]).inspect(),
+            len_builtin.call(&args1).inspect(),
             "Error: Wrong number of arguments. Got: 2, Expected: 1"
         );
-
-        // Testing with an array
-        assert_eq!(len_builtin.call(&[arr]).inspect(), "3");
-
-        // Testing with a string
-        assert_eq!(len_builtin.call(&[str]).inspect(), "11");
-
-        // Testing with unsupported type
+        assert_eq!(len_builtin.call(&args2).inspect(), "3");
+        assert_eq!(len_builtin.call(&args3).inspect(), "11");
         assert_eq!(
             len_builtin.call(&[Object::Null]).inspect(),
             "Error: Argument to `len` not supported. Got: NULL"
@@ -276,8 +285,9 @@ mod tests {
     #[test]
     fn test_print_builtin() {
         let str = Object::Str("neat string".to_string());
-        let print_builtin = get_builtin_by_name("print").unwrap();
-        let result = print_builtin.call(&[str]);
+        let print_builtin = BuiltinObject::get_builtin_by_name("print").unwrap();
+        let args1 = [str];
+        let result = print_builtin.call(&args1);
         if result.object_type() != "NULL" {
             panic!("Print builtin did not return a Null object");
         }
@@ -291,26 +301,21 @@ mod tests {
             Object::Integer(356),
         ]);
         let empty_arr = Object::Array(Vec::new());
-        let first_builtin = get_builtin_by_name("first").unwrap();
+        let first_builtin = BuiltinObject::get_builtin_by_name("first").unwrap();
 
-        // Testing with wrong number of arguments
+        let args1 = [arr.clone(), arr.clone()];
+        let args2 = [Object::Str("test".to_string())];
+        let args3 = [arr];
+
         assert_eq!(
-            first_builtin.call(&[arr, arr]).inspect(),
+            first_builtin.call(&args1).inspect(),
             "Error: Wrong number of arguments. Got: 2, Expected: 1"
         );
-
-        // Testing with non-array argument
         assert_eq!(
-            first_builtin
-                .call(&[Object::Str("test".to_string())])
-                .inspect(),
+            first_builtin.call(&args2).inspect(),
             "Error: Argument to `first` must be an Array. Got: STRING"
         );
-
-        // Testing with an array
-        assert_eq!(first_builtin.call(&[arr]).inspect(), "99");
-
-        // Testing with an empty array
+        assert_eq!(first_builtin.call(&args3).inspect(), "99");
         assert!(matches!(first_builtin.call(&[empty_arr]), Object::Null));
     }
 
@@ -323,32 +328,30 @@ mod tests {
         ]);
         let empty_arr = Object::Array(Vec::new());
         let str = Object::Str("neat string".to_string());
-        let last_builtin = get_builtin_by_name("last").unwrap();
+        let last_builtin = BuiltinObject::get_builtin_by_name("last").unwrap();
 
-        // Testing with wrong number of arguments
+        let args1 = [arr.clone(), arr.clone()];
+        let args2 = [str];
+        let args3 = [arr];
+        let args4 = [empty_arr];
+
         assert_eq!(
-            last_builtin.call(&[arr.clone(), arr]).inspect(),
+            last_builtin.call(&args1).inspect(),
             "Error: Wrong number of arguments. Got: 2, Expected: 1",
             "last builtin returned wrong result for wrong number of arguments"
         );
-
-        // Testing with non-array argument
         assert_eq!(
-            last_builtin.call(&[str]).inspect(),
+            last_builtin.call(&args2).inspect(),
             "Error: Argument to `last` must be an Array. Got: STRING",
             "last builtin returned wrong result for non-array argument"
         );
-
-        // Testing with an array
         assert_eq!(
-            last_builtin.call(&[arr]).inspect(),
+            last_builtin.call(&args3).inspect(),
             "356",
             "last builtin returned wrong result for array"
         );
-
-        // Testing with an empty array
         assert_eq!(
-            last_builtin.call(&[empty_arr]).inspect(),
+            last_builtin.call(&args4).inspect(),
             "Null",
             "last builtin returned wrong result for empty array"
         );
@@ -363,32 +366,30 @@ mod tests {
         ]);
         let empty_arr = Object::Array(Vec::new());
         let str = Object::Str("neat string".to_string());
-        let rest_builtin = get_builtin_by_name("rest").unwrap();
+        let rest_builtin = BuiltinObject::get_builtin_by_name("rest").unwrap();
 
-        // Testing with wrong number of arguments
+        let args1 = [arr.clone(), arr.clone()];
+        let args2 = [str];
+        let args3 = [arr];
+        let args4 = [empty_arr];
+
         assert_eq!(
-            rest_builtin.call(&[arr.clone(), arr]).inspect(),
+            rest_builtin.call(&args1).inspect(),
             "Error: Wrong number of arguments. Got: 2, Expected: 1",
             "rest builtin returned wrong result for wrong number of arguments"
         );
-
-        // Testing with non-array argument
         assert_eq!(
-            rest_builtin.call(&[str]).inspect(),
+            rest_builtin.call(&args2).inspect(),
             "Error: Argument to `rest` must be an Array. Got: STRING",
             "rest builtin returned wrong result for non-array argument"
         );
-
-        // Testing with an array
         assert_eq!(
-            rest_builtin.call(&[arr]).inspect(),
+            rest_builtin.call(&args3).inspect(),
             "[7, 356]",
             "rest builtin returned wrong result for array"
         );
-
-        // Testing with an empty array
         assert_eq!(
-            rest_builtin.call(&[empty_arr]).inspect(),
+            rest_builtin.call(&args4).inspect(),
             "Null",
             "rest builtin returned wrong result for empty array"
         );
@@ -403,25 +404,24 @@ mod tests {
         ]);
         let new_el = Object::Integer(666);
         let str = Object::Str("neat string".to_string());
-        let push_builtin = get_builtin_by_name("push").unwrap();
+        let push_builtin = BuiltinObject::get_builtin_by_name("push").unwrap();
 
-        // Testing with wrong number of arguments
+        let args1 = [arr.clone()];
+        let args2 = [str, new_el.clone()];
+        let args3 = [arr.clone(), new_el.clone()];
+
         assert_eq!(
-            push_builtin.call(&[arr]).inspect(),
+            push_builtin.call(&args1).inspect(),
             "Error: Wrong number of arguments. Got: 1, Expected: 2",
             "push builtin returned wrong result for wrong number of arguments"
         );
-
-        // Testing with non-array argument
         assert_eq!(
-            push_builtin.call(&[str, new_el]).inspect(),
+            push_builtin.call(&args2).inspect(),
             "Error: Argument to `push` must be an Array. Got: STRING",
             "push builtin returned wrong result for non-array argument"
         );
-
-        // Testing with an array and a new element
         assert_eq!(
-            push_builtin.call(&[arr, new_el]).inspect(),
+            push_builtin.call(&args3).inspect(),
             "[99, 7, 356, 666]",
             "push builtin returned wrong result for array with a new element"
         );
@@ -436,32 +436,30 @@ mod tests {
         ]);
         let empty_arr = Object::Array(Vec::new());
         let str = Object::Str("neat string".to_string());
-        let pop_builtin = get_builtin_by_name("pop").unwrap();
+        let pop_builtin = BuiltinObject::get_builtin_by_name("pop").unwrap();
 
-        // Testing with wrong number of arguments
+        let args1 = [arr.clone(), str.clone()];
+        let args2 = [str.clone()];
+        let args3 = [arr.clone()];
+        let args4 = [empty_arr];
+
         assert_eq!(
-            pop_builtin.call(&[arr, str]).inspect(),
+            pop_builtin.call(&args1).inspect(),
             "Error: Wrong number of arguments. Got: 2, Expected: 1",
             "pop builtin returned wrong result for wrong number of arguments"
         );
-
-        // Testing with non-array argument
         assert_eq!(
-            pop_builtin.call(&[str]).inspect(),
+            pop_builtin.call(&args2).inspect(),
             "Error: Argument to `pop` must be an Array. Got: STRING",
             "pop builtin returned wrong result for non-array argument"
         );
-
-        // Testing with an array
         assert_eq!(
-            pop_builtin.call(&[arr]).inspect(),
+            pop_builtin.call(&args3).inspect(),
             "[99, 7]",
             "pop builtin returned wrong result for array"
         );
-
-        // Testing with an empty array
         assert_eq!(
-            pop_builtin.call(&[empty_arr]).inspect(),
+            pop_builtin.call(&args4).inspect(),
             "Null",
             "pop builtin returned wrong result for empty array"
         );
@@ -472,25 +470,24 @@ mod tests {
         let str = Object::Str("My name is brad".to_string());
         let split_on = Object::Str(" ".to_string());
         let empty_str = Object::Str("".to_string());
-        let split_builtin = get_builtin_by_name("split").unwrap();
+        let split_builtin = BuiltinObject::get_builtin_by_name("split").unwrap();
 
-        // Testing with wrong number of arguments
+        let args1 = [str.clone()];
+        let args2 = [str.clone(), split_on.clone()];
+        let args3 = [empty_str, split_on.clone()];
+
         assert_eq!(
-            split_builtin.call(&[str]).inspect(),
+            split_builtin.call(&args1).inspect(),
             "Error: Wrong number of arguments. Got: 1, Expected: 2",
             "split builtin returned wrong result for wrong number of arguments"
         );
-
-        // Testing with valid string and split-on arguments
         assert_eq!(
-            split_builtin.call(&[str, split_on]).inspect(),
+            split_builtin.call(&args2).inspect(),
             "[\"My\", \"name\", \"is\", \"brad\"]",
             "split builtin returned wrong result for valid arguments"
         );
-
-        // Testing with an empty string
         assert_eq!(
-            split_builtin.call(&[empty_str, split_on]).inspect(),
+            split_builtin.call(&args3).inspect(),
             "[]",
             "split builtin returned wrong result for empty string"
         );
@@ -506,25 +503,24 @@ mod tests {
         ]);
         let join_on = Object::Str(" ".to_string());
         let not_an_array = Object::Str("not an array".to_string());
-        let join_builtin = get_builtin_by_name("join").unwrap();
+        let join_builtin = BuiltinObject::get_builtin_by_name("join").unwrap();
 
-        // Testing with wrong number of arguments
+        let args1 = [array.clone()];
+        let args2 = [not_an_array, join_on.clone()];
+        let args3 = [array.clone(), join_on.clone()];
+
         assert_eq!(
-            join_builtin.call(&[array]).inspect(),
+            join_builtin.call(&args1).inspect(),
             "Error: Wrong number of arguments. Got: 1, Expected: 2",
             "join builtin returned wrong result for wrong number of arguments"
         );
-
-        // Testing with non-array first argument
         assert_eq!(
-            join_builtin.call(&[not_an_array, join_on]).inspect(),
+            join_builtin.call(&args2).inspect(),
             "Error: First argument to `join` must be an Array. Got: STRING",
             "join builtin returned wrong result for non-array first argument"
         );
-
-        // Testing with valid array and join character
         assert_eq!(
-            join_builtin.call(&[array, join_on]).inspect(),
+            join_builtin.call(&args3).inspect(),
             "\"My name is brad\"",
             "join builtin returned wrong result for valid arguments"
         );

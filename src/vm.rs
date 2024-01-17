@@ -71,7 +71,7 @@ impl<'a> VirtualMachine<'a> {
                     self.current_frame_mut().ip += 2;
 
                     let constant = self.constants[const_index];
-                    self.push(constant.clone());
+                    &self.push(constant.clone());
                 }
 
                 Opcode::OpPop => {

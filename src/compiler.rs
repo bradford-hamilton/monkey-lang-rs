@@ -1480,7 +1480,7 @@ mod tests {
         let com_sym_tab = compiler.symbol_table.get_outer().unwrap();
         assert_eq!(
             com_sym_tab,
-            Box::new(global_symbol_table),
+            Box::new(global_symbol_table.clone()),
             "symbol table should be enclosed in the new scope"
         );
 
@@ -1490,7 +1490,8 @@ mod tests {
             "scope_index should be 0 after leaving scope"
         );
         assert_eq!(
-            compiler.symbol_table, global_symbol_table,
+            compiler.symbol_table,
+            global_symbol_table.clone(),
             "compiler should restore global symbol table"
         );
 

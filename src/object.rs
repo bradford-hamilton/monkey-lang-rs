@@ -430,15 +430,15 @@ mod tests {
     fn test_closure() {
         let compiled_func = CompiledFuncObject::new(Instructions::new(vec![]), 0, 0);
         let closure = ClosureObject {
-            func: compiled_func,
+            func: compiled_func.clone(),
             free: vec![],
         };
         let cl = Object::Closure(closure);
 
         assert_eq!(
             cl.object_type(),
-            "Closure",
-            "Closure object_type() returned wrong type. Expected: Closure. Got: {:?}",
+            "CLOSURE",
+            "Closure object_type() returned wrong type. Expected: CLOSURE. Got: {:?}",
             cl.object_type()
         );
 
@@ -459,23 +459,23 @@ mod tests {
             1,
             1,
         );
-        let compiled_func = Object::CompiledFunc(cf);
+        let compiled_func = Object::CompiledFunc(cf.clone()); // Clone here
 
         assert_eq!(
-            compiled_func.object_type(),
-            "CompiledFunction",
-            "CompiledFunction object_type() returned wrong type. Expected: CompiledFunction. Got: {:?}",
-            compiled_func.object_type()
-        );
+        compiled_func.object_type(),
+        "COMPILED_FUNCTION",
+        "CompiledFunction object_type() returned wrong type. Expected: COMPILED_FUNCTION. Got: {:?}",
+        compiled_func.object_type()
+    );
 
         let expected_inspect = format!("CompiledFunction[{:p}]", &cf);
         assert_eq!(
-            compiled_func.inspect(),
-            expected_inspect,
-            "CompiledFunction inspect() returned wrong string representation. Expected: {}. Got: {}",
-            expected_inspect,
-            compiled_func.inspect()
-        );
+        compiled_func.inspect(),
+        expected_inspect,
+        "CompiledFunction inspect() returned wrong string representation. Expected: {}. Got: {}",
+        expected_inspect,
+        compiled_func.inspect()
+    );
     }
 
     #[test]
@@ -608,7 +608,8 @@ mod tests {
             },
             value: "im a returned string".to_string(),
         };
-        let rv = Object::ReturnValue(&Object::Str(string_literal.value));
+        let obj = &Object::Str(string_literal.value);
+        let rv = Object::ReturnValue(obj);
 
         assert_eq!(
             rv.object_type(),
@@ -670,7 +671,7 @@ mod tests {
             b.inspect()
         );
 
-        let not_a_builtin = builtins::get_builtin_by_name("notABuiltin");
+        let not_a_builtin = builtins::BuiltinObject::get_builtin_by_name("notABuiltin");
         assert!(
             not_a_builtin.is_none(),
             "GetBuiltinByName(\"notABuiltin\") should have returned None"
